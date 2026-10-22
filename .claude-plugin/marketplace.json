@@ -9,8 +9,8 @@
     {
       "name": "paint",
       "source": "./",
-      "description": "Draw in a pane with the mouse: palette, brush, fill, lines, undo/redo, resizable canvas, SVG save, JS/ASCII export.",
-      "version": "0.10.0",
+      "description": "Draw in a pane with the mouse: palette, brush, fill, lines, mirror mode, undo/redo, resizable canvas, SVG save, JS/ASCII export.",
+      "version": "0.11.0",
       "license": "MIT",
       "category": "Fun",
       "tags": [

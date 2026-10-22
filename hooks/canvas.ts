@@ -1,6 +1,6 @@
 // The paint canvas, drawn and driven on the surface: pointer down / move / up draw as the
 // mouse is dragged (a line is filled between two moves), keys pick colors and tools.
-//   Layout (cells, region-relative):  row 0 palette · row 1 tools · row 2 export · rows 3.. canvas · last row hint
+//   Layout (cells, region-relative):  row 0 palette · row 1 tools · row 2 file · row 3 mirror · rows 4.. canvas · status row · help
 //   The canvas is pixels, two to a character with a half block (▀: top pixel as the color,
 //   bottom pixel as the background), 1 pixel per column.
 // A surface module runs apart from the hooks module, so it holds its own palette; a test
@@ -10,6 +10,7 @@ import type { ClientPointerEvent } from 'claude-code'
 type Lang = 'ko' | 'en'
 type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean }
 type Tool = 'pen' | 'line' | 'fill'
+type Mirror = 'off' | 'lr' | 'ud' | 'both' // lr: left-right, ud: up-down
 type Store = {
   w: number // pixels wide
   ph: number // pixels high, even
@@ -27,10 +28,12 @@ type Store = {
   noteFrom: string
   lang: Lang
   help: boolean // the help block under the canvas is shown
+  mirror: Mirror // strokes, lines and fills are repeated across the middle
 }
 
 const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#8b5cf6', '#ec4899', '#ffffff', '#000000']
 const EMPTY = '#202020'
+const EMPTY_AXIS = '#2e3d49' // empty pixels on a mirror axis, so the line of symmetry shows
 // Menu colors: tools light up green when chosen, file actions are blue, Clear is red, the language chip purple.
 const UI = {
   chip: '#2f343c', chipText: '#d5d9df',
@@ -40,12 +43,12 @@ const UI = {
   lang: '#3b3350', langText: '#dccdff',
 }
 const SEP = ' │ ' // between groups of chips (3 columns)
-const TOP = 3 // rows above the canvas
+const TOP = 4 // rows above the canvas
 const UNDO_LIMIT = 20
 const PALETTE_CHIP = 4 // columns per palette chip
 // The size limits, in pixels: the hooks module holds the same numbers (a test compares them).
 const LIMITS = { minW: 24, maxW: 160, minPh: 12, maxPh: 100 }
-const HELP_ROWS = 9 // the heading and eight lines; the hooks module sizes the region by this
+const HELP_ROWS = 10 // the heading and nine lines; the hooks module sizes the region by this
 const SWATCHES_END = 10 * PALETTE_CHIP // row 0: the 10 swatches take columns 0-39, then a separator, then the size group
 
 const even = (n: number) => n - (n % 2)
@@ -68,6 +71,7 @@ const TEXT = {
     help: [
       ['그리기', '왼쪽 버튼 드래그 = 그리기, 오른쪽 버튼 = 지우기'],
       ['도구', 'p 펜 · l 직선 · f 채우기 · b 굵기 바꾸기 (1-4)'],
+      ['대칭', 'm 키로 좌우 · 상하 · 4방향 · 끔 (반대쪽에도 찍혀요)'],
       ['직선', 'l 직선 도구, 또는 Shift 누르고 드래그 (가로·세로·45°)'],
       ['색', '1-9 색 고르기 · 0 지우개'],
       ['되돌리기', 'z 또는 Ctrl+Z 되돌리기 · y, Ctrl+Y, Shift+Z 다시'],
@@ -76,7 +80,9 @@ const TEXT = {
       ['참고', '키는 캔버스를 한 번 클릭해야 먹어요 · ? 로 접기'],
     ],
     tools: { pen: '펜', line: '직선', fill: '채우기' },
-    status: (tool: string, brush: number, color: number, undo: number, redo: number) => `${tool} · 굵기 ${brush} · 색 ${color} · 되돌리기 ${undo} · 다시 ${redo}`,
+    mirrorLabel: '대칭', mirrorChips: { off: ' 끔 ', lr: ' ↔ 좌우 ', ud: ' ↕ 상하 ', both: ' ✛ 4방향 ' },
+    mirrorName: { off: '끔', lr: '좌우', ud: '상하', both: '4방향' },
+    status: (tool: string, brush: number, color: number, undo: number, redo: number, mirror: string) => `${tool} · 굵기 ${brush} · 색 ${color} · 되돌리기 ${undo} · 다시 ${redo}${mirror ? ` · 대칭 ${mirror}` : ''}`,
   },
   en: {
     pen: ' ✎ Pen ', line: ' ╱ Line ', fill: ' ▨ Fill ', brush: (n: number) => ` ● Brush ${n} `, undo: ' ↶ Undo ', redo: ' ↷ Redo ', clear: ' ✕ Clear ', save: ' ⤓ Save ',
@@ -86,6 +92,7 @@ const TEXT = {
     help: [
       ['Draw', 'Left-button drag draws, right-button drag erases'],
       ['Tools', 'p pen · l line · f fill · b brush size (1-4)'],
+      ['Mirror', 'm cycles left-right / up-down / both / off'],
       ['Line', 'l line tool, or hold Shift while dragging (0/45/90°)'],
       ['Colors', '1-9 pick a color · 0 eraser'],
       ['Undo', 'z or Ctrl+Z undo · y, Ctrl+Y or Shift+Z redo'],
@@ -94,11 +101,13 @@ const TEXT = {
       ['Note', 'Click the canvas once so keys work · ? folds help'],
     ],
     tools: { pen: 'Pen', line: 'Line', fill: 'Fill' },
-    status: (tool: string, brush: number, color: number, undo: number, redo: number) => `${tool} · Brush ${brush} · Color ${color} · Undo ${undo} · Redo ${redo}`,
+    mirrorLabel: 'Mirror', mirrorChips: { off: ' Off ', lr: ' ↔ Left-right ', ud: ' ↕ Up-down ', both: ' ✛ Both ' },
+    mirrorName: { off: 'off', lr: 'left-right', ud: 'up-down', both: 'both' },
+    status: (tool: string, brush: number, color: number, undo: number, redo: number, mirror: string) => `${tool} · Brush ${brush} · Color ${color} · Undo ${undo} · Redo ${redo}${mirror ? ` · Mirror ${mirror}` : ''}`,
   },
 } as const
 
-type Kind = 'plain' | 'tool' | 'action' | 'danger' | 'lang'
+type Kind = 'plain' | 'tool' | 'action' | 'danger' | 'lang' | 'label'
 type Chip = { id: string; label: string; kind: Kind; on?: boolean }
 
 // The two chip rows as groups: a separator sits between groups, one space between chips in a group.
@@ -123,6 +132,14 @@ const rowFile = (s: Store): Chip[][] => [
   ],
   [{ id: 'clear', label: TEXT[s.lang].clear, kind: 'danger' }],
   [{ id: 'lang', label: TEXT[s.lang].lang, kind: 'lang' }],
+]
+
+// Row 3: the mirror modes, one of them lit; a dim word in front says what the row is.
+const rowMirror = (s: Store): Chip[][] => [
+  [
+    { id: 'label', label: TEXT[s.lang].mirrorLabel, kind: 'label' },
+    ...(['off', 'lr', 'ud', 'both'] as const).map(m => ({ id: `mirror-${m}`, label: TEXT[s.lang].mirrorChips[m], kind: 'tool' as const, on: s.mirror === m })),
+  ],
 ]
 
 /** Where each chip of a row starts and ends (columns). */
@@ -197,14 +214,26 @@ function snap(from: { x: number; y: number }, to: { x: number; y: number }): { x
   return { x: from.x + Math.sign(dx) * m, y: from.y + Math.sign(dy) * m }
 }
 
+/** The points a point is repeated at by the mirror mode (not the point itself): across the middle, left-right and/or up-down. */
+function mirrored(s: Store, x: number, y: number): { x: number; y: number }[] {
+  const lr = s.mirror === 'lr' || s.mirror === 'both'
+  const ud = s.mirror === 'ud' || s.mirror === 'both'
+  const out: { x: number; y: number }[] = []
+  if (lr) out.push({ x: s.w - 1 - x, y })
+  if (ud) out.push({ x, y: s.ph - 1 - y })
+  if (lr && ud) out.push({ x: s.w - 1 - x, y: s.ph - 1 - y })
+  return out
+}
+
+/** One pixel in the current color, and its mirror images. */
+function put(s: Store, x: number, y: number) {
+  for (const q of [{ x, y }, ...mirrored(s, x, y)]) if (q.x >= 0 && q.x < s.w && q.y >= 0 && q.y < s.ph) s.grid[q.y * s.w + q.x] = s.color
+}
+
 function stamp(s: Store, at: { x: number; y: number }) {
   const r = Math.floor((s.brush - 1) / 2)
-  for (let dy = 0; dy < s.brush; dy++)
-    for (let dx = 0; dx < s.brush; dx++) {
-      const x = at.x - r + dx
-      const y = at.y - r + dy
-      if (x >= 0 && x < s.w && y >= 0 && y < s.ph) s.grid[y * s.w + x] = s.color
-    }
+  // each pixel of the brush is mirrored itself, so an even brush mirrors exactly
+  for (let dy = 0; dy < s.brush; dy++) for (let dx = 0; dx < s.brush; dx++) put(s, at.x - r + dx, at.y - r + dy)
 }
 
 function fill(s: Store, at: { x: number; y: number }) {
@@ -224,6 +253,11 @@ function fill(s: Store, at: { x: number; y: number }) {
   }
 }
 
+/** Fill from a point and from each of its mirror images (a region already filled is skipped: its color is now the new one). */
+function fillAll(s: Store, at: { x: number; y: number }) {
+  for (const q of [at, ...mirrored(s, at.x, at.y)]) if (q.x >= 0 && q.x < s.w && q.y >= 0 && q.y < s.ph) fill(s, q)
+}
+
 function pushUndo(s: Store) {
   s.redo = [] // a new change ends the way forward
   s.undo.push(s.grid.slice())
@@ -235,7 +269,7 @@ export default function Paint(props: Props, surface: any) {
   const ph = even(clamp(Math.round(props?.ph ?? 32), LIMITS.minPh, LIMITS.maxPh))
 
   if (surface.state === undefined) {
-    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false }
+    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, mirror: 'off' }
     reset(s, w, ph)
     let tick = 0
     // the state is a handle on the store the listeners below mutate; a new object asks for a redraw
@@ -265,6 +299,10 @@ export default function Paint(props: Props, surface: any) {
         s.grid = Array<number>(s.w * s.ph).fill(0)
       } else if (id === 'save') {
         surface.post({ save: s.grid.join(''), w: s.w, ph: s.ph })
+      } else if (id === 'mirror') {
+        s.mirror = s.mirror === 'off' ? 'lr' : s.mirror === 'lr' ? 'ud' : s.mirror === 'ud' ? 'both' : 'off'
+      } else if (id.startsWith('mirror-')) {
+        s.mirror = id.slice('mirror-'.length) as Mirror
       } else if (id === 'help') {
         // the region's height depends on it, and that is the hooks module's to set
         surface.post({ help: !s.help, w: s.w, ph: s.ph })
@@ -280,6 +318,7 @@ export default function Paint(props: Props, surface: any) {
     }
 
     surface.onPointer((e: ClientPointerEvent) => {
+      if (e.type === 'down') s.note = '' // a note (saved, copied...) stays until the next thing you do
       if (e.type === 'up' || e.type === 'leave') {
         s.last = null
         s.start = null
@@ -296,7 +335,7 @@ export default function Paint(props: Props, surface: any) {
           else if (x >= size.bigger.from && x < size.bigger.to) act('bigger')
           else if (x >= size.help.from && x < size.help.to) act('help')
         } else {
-          const hit = layout(e.y === 1 ? rowTools(s) : rowFile(s)).find(t => x >= t.from && x < t.to)
+          const hit = layout(e.y === 1 ? rowTools(s) : e.y === 2 ? rowFile(s) : rowMirror(s)).find(t => t.id !== 'label' && x >= t.from && x < t.to)
           if (hit) act(hit.id)
         }
         return
@@ -309,7 +348,7 @@ export default function Paint(props: Props, surface: any) {
         const erase = e.button === 'right'
         const keep = s.color
         if (erase) s.color = 0
-        if (s.tool === 'fill' && !erase) fill(s, p)
+        if (s.tool === 'fill' && !erase) fillAll(s, p)
         else stamp(s, p)
         if (erase) s.color = keep
         s.last = s.tool === 'fill' && !erase ? null : p
@@ -342,6 +381,7 @@ export default function Paint(props: Props, surface: any) {
     })
 
     surface.onKey((e: { key: string; ctrl?: true; meta?: true; shift?: true }) => {
+      s.note = ''
       const k = e.key.toLowerCase()
       if (e.ctrl || e.meta) {
         // Ctrl+Z undoes, Ctrl+Y (or Ctrl+Shift+Z where the terminal says Shift) redoes; Cmd likewise. Nothing else with a modifier.
@@ -353,6 +393,7 @@ export default function Paint(props: Props, surface: any) {
       else if (k === 'p') act('pen')
       else if (k === 'l') act('line')
       else if (k === 'f') act('fill')
+      else if (k === 'm') act('mirror')
       else if (k === 'b') act('brush')
       else if (k === 'z') act(e.shift ? 'redo' : 'undo') // z undoes, Shift+Z or y redoes
       else if (k === 'y') act('redo')
@@ -378,6 +419,15 @@ export default function Paint(props: Props, surface: any) {
   return view(s, surface)
 }
 
+/** The color of an empty pixel: a little lighter on the line(s) of symmetry while mirroring. */
+function guide(s: Store, x: number, y: number): string {
+  const lr = s.mirror === 'lr' || s.mirror === 'both'
+  const ud = s.mirror === 'ud' || s.mirror === 'both'
+  const onX = lr && (x === Math.floor((s.w - 1) / 2) || x === Math.ceil((s.w - 1) / 2))
+  const onY = ud && (y === Math.floor((s.ph - 1) / 2) || y === Math.ceil((s.ph - 1) / 2))
+  return onX || onY ? EMPTY_AXIS : EMPTY
+}
+
 function view(s: Store, surface: any) {
   const { Box, Text } = surface.elements
 
@@ -387,6 +437,7 @@ function view(s: Store, surface: any) {
     : c.kind === 'action' ? { backgroundColor: UI.action, color: UI.actionText }
     : c.kind === 'danger' ? { backgroundColor: UI.danger, color: UI.dangerText }
     : c.kind === 'lang' ? { backgroundColor: UI.lang, color: UI.langText }
+    : c.kind === 'label' ? { dimColor: true }
     : { backgroundColor: UI.chip, color: UI.chipText }
   const chipRow = (groups: Chip[][]) =>
     Text({
@@ -419,6 +470,7 @@ function view(s: Store, surface: any) {
   })
   const toolsRow = chipRow(rowTools(s))
   const exportRow = chipRow(rowFile(s))
+  const mirrorRow = chipRow(rowMirror(s))
 
   const rows: unknown[] = []
   for (let r = 0; r < s.ph; r += 2) {
@@ -426,11 +478,10 @@ function view(s: Store, surface: any) {
     for (let x = 0; x < s.w; x++) {
       const top = s.grid[r * s.w + x] ?? 0
       const bottom = s.grid[(r + 1) * s.w + x] ?? 0
-      const cell =
-        top === bottom ? { text: ' ', bg: top ? PALETTE[top]! : EMPTY }
-        : !top ? { text: '▄', color: PALETTE[bottom]!, bg: EMPTY }
-        : !bottom ? { text: '▀', color: PALETTE[top]!, bg: EMPTY }
-        : { text: '▀', color: PALETTE[top]!, bg: PALETTE[bottom]! }
+      const topColor = top ? PALETTE[top]! : guide(s, x, r)
+      const bottomColor = bottom ? PALETTE[bottom]! : guide(s, x, r + 1)
+      // two pixels in one character: the top one is the color of a half block, the bottom one its background
+      const cell = topColor === bottomColor ? { text: ' ', bg: topColor } : { text: '▀', color: topColor, bg: bottomColor }
       const last = runs[runs.length - 1]
       if (last && last.color === (cell as any).color && last.bg === cell.bg) last.text += cell.text
       else runs.push({ ...cell } as any)
@@ -439,7 +490,7 @@ function view(s: Store, surface: any) {
   }
 
   const t = TEXT[s.lang]
-  const status = s.note || (s.help ? t.status(t.tools[s.tool], s.brush, s.color, s.undo.length, s.redo.length) : t.hint)
+  const status = s.note || (s.help ? t.status(t.tools[s.tool], s.brush, s.color, s.undo.length, s.redo.length, s.mirror === 'off' ? '' : t.mirrorName[s.mirror]) : t.hint)
 
   // The help block: a heading rule, then a label column and its text, one line each.
   const LABEL = 11
@@ -455,6 +506,6 @@ function view(s: Store, surface: any) {
 
   return Box({
     flexDirection: 'column',
-    children: [palette, toolsRow, exportRow, ...rows, Text({ dimColor: !s.note, bold: !!s.note, wrap: 'truncate-end', children: [status] }), ...helpRows],
+    children: [palette, toolsRow, exportRow, mirrorRow, ...rows, Text({ dimColor: !s.note, bold: !!s.note, wrap: 'truncate-end', children: [status] }), ...helpRows],
   })
 }

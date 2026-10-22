@@ -4,15 +4,16 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 
 - Drag to draw (left button), drag with the right button to erase
 - Palette of 9 colors plus an eraser, brush sizes 1-4, flood fill, straight lines
+- **Mirror mode**: draw one half and the other half follows (left-right, up-down, or both)
 - Undo / redo (20 steps), resizable canvas, English and Korean
 - Save as SVG, or copy the drawing as a JS/TS array or as ASCII art
-- A help block with all the shortcuts sits under the canvas (fold it with `?`)
+- A help block with all the shortcuts sits under the canvas (fold it with `?`); the status line shows the tool, brush, color, undo depth and mirror mode
 
 <p align="center">
-  <img src="docs/preview.png" alt="The paint pane: a menu of colors and tools, a small pixel-art house scene on the canvas, and the help block below" width="560">
+  <img src="docs/preview.png" alt="The paint pane in left-right mirror mode: a symmetric pixel-art butterfly drawn on the left half only, with the Mirror menu row, the status line and the help block" width="560">
 </p>
 
-<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the sample picture drawn through its mouse handlers. Fonts and colors will differ in your terminal.</sub></p>
+<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the butterfly drawn through its mouse handlers on the left half only (mirror mode on). Fonts and colors will differ in your terminal.</sub></p>
 
 > **Status: early (0.9).** It was built against Claude Code's mod API and tested with a simulated engine and the API's type definitions. How mouse drags, `Shift` and `Ctrl+Z` reach it depends on your terminal (see [Terminals](#terminals)). Issues and reports of what works where are welcome.
 
@@ -33,6 +34,7 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 | Draw / erase | drag with the left / right mouse button |
 | Colors | `1`-`9`, `0` is the eraser (or click the swatches) |
 | Tools | `p` pen, `l` line, `f` fill, `b` brush size (1-4) |
+| Mirror | `m` cycles off → left-right → up-down → both → off, or click the chips on the fourth menu row |
 | Straight line | the `Line` tool (`l`), or hold `Shift` while dragging (snaps to 0 / 45 / 90°) |
 | Undo / redo | `z` or `Ctrl+Z` / `y`, `Ctrl+Y` or `Shift+Z` |
 | Clear | `c` (undoable) |
@@ -43,6 +45,18 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 | Language | the chip at the end of the third row, or `/paint en` / `/paint ko` (Korean is the default) |
 
 The last JS/ASCII export can be printed in the chat with `/paint export`. If the terminal has no clipboard path, exports are written to `~/Pictures` instead.
+
+### Mirror mode
+
+Turn it on with `m` (or click a chip on the **Mirror** row) and everything you do is repeated across the middle of the canvas:
+
+| Mode | What is repeated |
+|---|---|
+| Left-right | each pixel also appears on the other side of the vertical center line |
+| Up-down | the same across the horizontal center line |
+| Both | all four corners: a pixel and its three images |
+
+It covers drags with the pen, the `Line` tool (including `Shift` lines and the live preview), erasing with the right button, flood fill (it fills the mirror image's region too) and every brush size (an even brush mirrors pixel for pixel). While it is on, the empty pixels on the axis are drawn a little lighter so you can see where the middle is, and the status line says which mode is active. One undo removes a whole mirrored stroke. Mirror mode is a setting, not a drawing step: it is not part of undo, and resizing the canvas keeps it.
 
 ### Canvas size
 
@@ -91,8 +105,12 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 패널을 그림판처럼 씁니다. `/paint` 로 열고 마우스를 끌어서 그립니다.
 
 - 왼쪽 버튼으로 그리고, 오른쪽 버튼으로 지웁니다. 위쪽 줄에서 색(0은 지우개)과 도구를 클릭하거나, 캔버스를 한 번 클릭한 뒤 키로 고릅니다.
-- 키: `1`-`9` 색, `0` 지우개, `p` 펜, `l` 직선, `f` 채우기, `b` 굵기(1-4), `z` 되돌리기(`Ctrl+Z`도 돼요), `y` 다시 실행(`Ctrl+Y`, `Shift+Z`), `c` 지우기, `e` 저장
+- 키: `1`-`9` 색, `0` 지우개, `p` 펜, `l` 직선, `f` 채우기, `m` 대칭, `b` 굵기(1-4), `z` 되돌리기(`Ctrl+Z`도 돼요), `y` 다시 실행(`Ctrl+Y`, `Shift+Z`), `c` 지우기, `e` 저장
 - 직선: `직선` 도구(`l`)는 누른 곳에서 끌고 있는 곳까지 곧은 선을 그려요. 펜이나 직선 도구에서 `Shift` 를 누른 채 끌면 가로·세로·45° 중 가까운 쪽으로 맞춰져요. (터미널에 따라 Shift+드래그는 텍스트 선택에 쓰여서 프로그램에 안 넘어올 수 있어요. 그럴 땐 `직선` 도구를 쓰세요.)
+- 대칭(미러) 모드: `m` 키나 네 번째 메뉴 줄의 칩으로 켜면, 칠하는 모든 것이 캔버스 가운데를 기준으로 반대쪽에도 똑같이 찍혀요.
+  - 모드는 `좌우`, `상하`, `4방향`이에요. `m` 을 누를 때마다 좌우 → 상하 → 4방향 → 끔 순서로 바뀌어요.
+  - 펜, 직선 도구(Shift 직선과 미리보기 포함), 오른쪽 버튼 지우개, 채우기(반대쪽 영역도 함께 채워요), 모든 굵기가 대칭으로 동작해요.
+  - 켜 있는 동안 가운데 줄(축)의 빈 픽셀이 조금 밝게 보이고, 상태 줄에 `대칭 좌우` 같은 표시가 나와요. 한 번 되돌리기로 대칭 획 전체가 사라져요. 대칭 설정은 되돌리기 대상이 아니에요.
 - 캔버스 아래에 도움말(단축키 목록)이 있어요. `?`(또는 `h`) 키나 첫 줄 끝의 `?` 칩으로 접고 펼쳐요.
 - 저장하면 `~/Pictures/paint-날짜.svg` 가 만들어집니다.
 - 크기: `−` `+` 칩, `[` `]` 키, `/paint 100x60`, 또는 캔버스 아래 입력칸에 직접 입력해요. 구분은 `x`, `*`, `×`, 공백 모두 돼요 (`100x60`, `100*60`, `100 60`).

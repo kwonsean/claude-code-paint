@@ -32,11 +32,11 @@ export function stepSize(from: { w: number; ph: number }, dir: 1 | -1, maxW: num
 }
 
 // Rows the help block under the canvas takes (canvas.ts draws exactly this many while it is open).
-export const HELP_ROWS = 9
+export const HELP_ROWS = 10
 let helpOpen = true
 
-// The pane's rows: the canvas, its 3 chip rows and status line, the size field, and the help block when open.
-const paneRows = (ph: number) => ph / 2 + 7 + (helpOpen ? HELP_ROWS : 0)
+// The pane's rows: the canvas, its 4 menu rows and status line, the size field, and the help block when open.
+const paneRows = (ph: number) => ph / 2 + 8 + (helpOpen ? HELP_ROWS : 0)
 
 export type Lang = 'ko' | 'en'
 let lang: Lang = 'ko'
@@ -240,7 +240,7 @@ export const register: Register = on => {
     return Box({
       flexDirection: 'column',
       children: [
-        Client({ key: 'canvas', module: './canvas.ts', props: props(), width: Math.max(size.w, MENU_WIDTH), height: size.ph / 2 + 4 + (helpOpen ? HELP_ROWS : 0) }),
+        Client({ key: 'canvas', module: './canvas.ts', props: props(), width: Math.max(size.w, MENU_WIDTH), height: size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) }),
         Input({
           key: 'size',
           label: MSG[lang].sizeLabel,
