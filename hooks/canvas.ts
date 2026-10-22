@@ -480,7 +480,10 @@ export default function Paint(props: Props, surface: any) {
       if (!e.ctrl && !e.meta && e.key === 'R') { act('reset-all'); return } // Shift+R: every color back to its default
       const k = e.key.toLowerCase()
       if (e.ctrl || e.meta) {
-        // Ctrl+Z undoes, Ctrl+Y (or Ctrl+Shift+Z where the terminal says Shift) redoes; Cmd likewise. Nothing else with a modifier.
+        // Ctrl+Z undoes, Ctrl+Y (or Ctrl+Shift+Z where the terminal says Shift) redoes. `meta` is what a terminal calls
+        // Alt/Option, so Alt+Z does the same. The engine's key event has no flag for the Mac's Cmd key, and a terminal
+        // normally keeps Cmd+Z for itself (its Edit menu), so Cmd+Z can only arrive by luck: z and y never depend on it.
+        // Nothing else with a modifier.
         if (k === 'z') act(e.shift ? 'redo' : 'undo')
         else if (k === 'y') act('redo')
         return
