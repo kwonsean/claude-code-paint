@@ -231,8 +231,8 @@ function pushUndo(s: Store) {
 }
 
 export default function Paint(props: Props, surface: any) {
-  const w = clamp(Math.round(props?.w ?? 80), LIMITS.minW, LIMITS.maxW)
-  const ph = even(clamp(Math.round(props?.ph ?? 40), LIMITS.minPh, LIMITS.maxPh))
+  const w = clamp(Math.round(props?.w ?? 32), LIMITS.minW, LIMITS.maxW)
+  const ph = even(clamp(Math.round(props?.ph ?? 32), LIMITS.minPh, LIMITS.maxPh))
 
   if (surface.state === undefined) {
     const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false }

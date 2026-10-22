@@ -47,7 +47,12 @@ Change it with the `−` `+` chips (or `[` `]`), `/paint bigger|smaller`, `/pain
 | minimum | 24 px | 12 px |
 | maximum | 160 px | 100 px |
 
-The height is made even (two pixels share one character row, so 25 becomes 24). A value outside the limits is moved to the nearest limit and you are told what it became. The chips step through 64 · 80 · 112 · 144 · 160 px wide. The menu rows keep their full width even on a narrow canvas. Resizing keeps what fits of the drawing (from the top left) and clears undo/redo.
+The height is made even (two pixels share one character row, so 25 becomes 24). A value outside the limits is moved to the nearest limit and you are told what it became. The menu rows keep their full width even on a narrow canvas. Resizing keeps what fits of the drawing (from the top left) and clears undo/redo.
+
+A new canvas is **32 × 32** px. `+` and `−` change the width and the height together, 8 px each, so a square canvas stays square. When one side reaches its limit, only the other side keeps changing:
+
+- Growing: the width stops at 160 px or at the columns your pane has, whichever is smaller, and the height at 100 px. In a narrow pane (say 70 columns) the canvas grows square up to the pane's width and then only taller; in a wide pane the height limit comes first (96 × 96 → 104 × 100) and then only the width grows, up to 160.
+- Shrinking: 32 × 32 → 24 × 24, then only the height goes down to 12 (24 × 16 → 24 × 12).
 
 ## How it works
 
@@ -91,7 +96,11 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
   | 최소 | 24 픽셀 | 12 픽셀 |
   | 최대 | 160 픽셀 | 100 픽셀 |
 
-  세로는 짝수로 맞춰져요 (픽셀 둘이 글자 한 줄을 나눠 써서요: 25 → 24). 범위를 벗어나면 가장 가까운 한계로 맞추고 무엇으로 바꿨는지 알려 줘요. `−` `+` 칩은 64 · 80 · 112 · 144 · 160 (가로) 단계로 움직여요. 캔버스가 좁아도 메뉴는 잘리지 않아요.
+  세로는 짝수로 맞춰져요 (픽셀 둘이 글자 한 줄을 나눠 써서요: 25 → 24). 범위를 벗어나면 가장 가까운 한계로 맞추고 무엇으로 바꿨는지 알려 줘요. 캔버스가 좁아도 메뉴는 잘리지 않아요.
+
+  처음 캔버스는 **32 × 32** 픽셀이에요. `+` `−` 는 가로와 세로를 같이 8픽셀씩 바꿔서, 정사각형이면 계속 정사각형이에요. 한쪽이 한계에 닿으면 나머지 한쪽만 계속 바뀌어요.
+  - 키울 때: 가로는 160픽셀과 패널의 가로 칸 수 중 작은 쪽까지, 세로는 100픽셀까지예요. 터미널이 좁으면(예: 70칸) 가로가 패널 너비에 닿을 때까지 정사각형으로 커지고 그다음엔 세로만 늘어요. 넓으면 세로 한계가 먼저 와서(96×96 → 104×100) 그다음엔 가로만 160까지 늘어요.
+  - 줄일 때: 32×32 → 24×24, 그다음엔 세로만 12까지 줄어요 (24×16 → 24×12).
 - 언어: 세 번째 줄 끝의 칩이나 `/paint en` `/paint ko` 로 영어와 한국어를 바꿔요.
 - 한 글자에 세로 픽셀 둘을 넣는 반블록으로 그려서, 터미널이 마우스 위치를 픽셀 단위로 알려 주면(kitty, Ghostty, iTerm2, WezTerm) 더 정확하게 그려집니다.
 

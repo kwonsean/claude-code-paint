@@ -6,7 +6,7 @@
 import type { Register } from 'claude-code'
 
 const PANE = 'paint'
-export const SIZE = { w: 80, ph: 40 }
+export const SIZE = { w: 32, ph: 32 } // the size a new canvas starts at
 // The canvas size limits, in pixels. The height is made even (two pixels share a character row).
 export const MIN = { w: 24, ph: 12 }
 export const MAX = { w: 160, ph: 100 }
@@ -17,13 +17,18 @@ export const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8
 
 const even = (n: number) => n - (n % 2)
 
-// The sizes the − and + chips step through: width in pixels; the height is half of it.
-export const LADDER = [64, 80, 112, 144, 160]
+// The − and + chips change width and height together, STEP pixels each, so a square canvas stays square.
+// A side that has reached its limit stays there and the other keeps going, until both are at theirs.
+// The width limit is MAX.w or, if narrower, the columns the pane has (nothing wider would fit on screen).
+export const STEP = 8
 
-/** The next size up (dir 1) or down (-1) from `from`, which may be a custom size; the same size at either end. */
-export function stepSize(from: { w: number; ph: number }, dir: 1 | -1): { w: number; ph: number } {
-  const w = dir === 1 ? LADDER.find(x => x > from.w) : [...LADDER].reverse().find(x => x < from.w)
-  return w === undefined ? from : { w, ph: even(Math.round(w / 2)) }
+/** One step bigger (dir 1) or smaller (-1) from `from`; `maxW` is the widest the canvas may grow. Never moves a side the wrong way. */
+export function stepSize(from: { w: number; ph: number }, dir: 1 | -1, maxW: number = MAX.w): { w: number; ph: number } {
+  if (dir === 1) {
+    const cap = Math.min(MAX.w, Math.max(MIN.w, maxW))
+    return { w: Math.max(from.w, Math.min(cap, from.w + STEP)), ph: Math.max(from.ph, Math.min(MAX.ph, from.ph + STEP)) }
+  }
+  return { w: Math.min(from.w, Math.max(MIN.w, from.w - STEP)), ph: Math.min(from.ph, Math.max(MIN.ph, from.ph - STEP)) }
 }
 
 // Rows the help block under the canvas takes (canvas.ts draws exactly this many while it is open).
@@ -44,6 +49,7 @@ const MSG = {
     nothingExported: '아직 내보낸 게 없어요: 캔버스에서 "JS 코드 복사"나 "ASCII 복사"를 먼저 누르세요.',
     opened: (w: number, ph: number) => `Paint: ${w}×${ph} 픽셀. 드래그해서 그려요 (키를 쓰려면 캔버스를 먼저 클릭하세요)`,
     biggest: '가장 큰 크기예요',
+    biggestFit: (cols: number) => `이 터미널 너비(${cols}칸)에서는 가장 큰 크기예요`,
     smallest: '가장 작은 크기예요',
     sized: (w: number, ph: number) => `${w}×${ph} 픽셀`,
     empty: '아직 그린 게 없어요',
@@ -67,6 +73,7 @@ const MSG = {
     nothingExported: 'Nothing exported yet: press "Copy JS" or "Copy ASCII" on the canvas first.',
     opened: (w: number, ph: number) => `Paint: ${w}×${ph} px. Drag to draw (click the canvas first for the keys)`,
     biggest: 'This is the biggest size',
+    biggestFit: (cols: number) => `This is the biggest that fits this terminal (${cols} columns wide)`,
     smallest: 'This is the smallest size',
     sized: (w: number, ph: number) => `${w}×${ph} px`,
     empty: 'Nothing drawn yet',
@@ -188,6 +195,7 @@ export function toSvg(grid: number[], w: number, ph: number, size = 6): string {
 }
 
 let size = { ...SIZE }
+let paneColumns = MAX.w // the columns the pane last had to draw in: the canvas may not grow wider than that
 let saves = 0
 
 /** Another canvas size: the pane grows to fit and the region is drawn again. */
@@ -210,7 +218,7 @@ export const register: Register = on => {
     const asked = parseLang(word.replace(/^lang(uage)?\s*/, ''))
     if (asked) lang = asked
     else if (word === 'export') return { text: lastExport || MSG[lang].nothingExported }
-    else if (word === 'bigger' || word === 'smaller') size = stepSize(size, word === 'bigger' ? 1 : -1)
+    else if (word === 'bigger' || word === 'smaller') size = stepSize(size, word === 'bigger' ? 1 : -1, paneColumns)
     else if (e.args.trim() !== '') {
       const next = parseSize(e.args)
       if (!next) return { text: MSG[lang].usage }
@@ -226,6 +234,8 @@ export const register: Register = on => {
       const { Text } = $.ui.resolve(e)
       return Text({ children: [MSG[lang].needTerminal] })
     }
+    const columns = e.props?.bodyColumns
+    if (typeof columns === 'number' && columns > 0) paneColumns = columns
     const { Box, Client, Input } = $.ui.resolve(e)
     return Box({
       flexDirection: 'column',
@@ -268,8 +278,12 @@ export const register: Register = on => {
     }
 
     if (data.resize === 1 || data.resize === -1) {
-      const next = stepSize(size, data.resize)
-      if (next.w === size.w) return { props: props(data.resize === 1 ? t.biggest : t.smallest) }
+      const next = stepSize(size, data.resize, paneColumns)
+      if (next.w === size.w && next.ph === size.ph) {
+        // nothing moved: the limit (or, if the terminal is narrower than MAX.w, the terminal's width and the height limit)
+        const byTerminal = data.resize === 1 && paneColumns < MAX.w && size.w >= paneColumns
+        return { props: props(data.resize === 1 ? (byTerminal ? t.biggestFit(paneColumns) : t.biggest) : t.smallest) }
+      }
       await applySize($, next)
       return { props: props(t.sized(size.w, size.ph)) }
     }

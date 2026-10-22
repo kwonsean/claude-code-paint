@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { LADDER, MAX, MIN, PALETTE, crop, decode, parseLang, parseSize, stepSize, toAscii, toCode, toSvg } from '../hooks/register'
+import { MAX, MIN, PALETTE, SIZE, STEP, crop, decode, parseLang, parseSize, stepSize, toAscii, toCode, toSvg } from '../hooks/register'
 
 test('저장: 숫자열을 팔레트 번호로 읽고, 틀린 건 거절한다', () => {
   expect(decode('0120', 2, 2)).toEqual([0, 1, 2, 0])
@@ -36,13 +36,41 @@ test('크기: x, *, ×, 공백을 모두 받고, 세로는 짝수로, 범위 밖
   expect([MIN, MAX]).toEqual([{ w: 24, ph: 12 }, { w: 160, ph: 100 }])
 })
 
-test('크기 단계: 한 칸씩 키우고 줄이고, 끝에서는 그대로', () => {
-  expect(stepSize({ w: 80, ph: 40 }, 1)).toEqual({ w: 112, ph: 56 })
-  expect(stepSize({ w: 80, ph: 40 }, -1)).toEqual({ w: 64, ph: 32 })
-  expect(stepSize({ w: 160, ph: 80 }, 1)).toEqual({ w: 160, ph: 80 })
-  expect(stepSize({ w: LADDER[0]!, ph: 32 }, -1)).toEqual({ w: 64, ph: 32 }) // the smallest stays
-  expect(stepSize({ w: 100, ph: 60 }, 1)).toEqual({ w: 112, ph: 56 }) // a custom size joins the ladder
-  expect(stepSize({ w: 100, ph: 60 }, -1)).toEqual({ w: 80, ph: 40 })
+test('크기 단계: 기본은 32×32, +/−는 가로·세로를 같이 STEP씩 바꾼다', () => {
+  expect(SIZE).toEqual({ w: 32, ph: 32 })
+  expect(STEP).toBe(8)
+  expect(stepSize({ w: 32, ph: 32 }, 1)).toEqual({ w: 40, ph: 40 }) // square stays square
+  expect(stepSize({ w: 40, ph: 40 }, 1)).toEqual({ w: 48, ph: 48 })
+  expect(stepSize({ w: 32, ph: 32 }, -1)).toEqual({ w: 24, ph: 24 })
+})
+
+test('크기 단계: 한쪽이 끝에 닿으면 나머지 한쪽만 움직인다 (키울 때)', () => {
+  // the height limit (100) comes first on a wide terminal: then only the width grows
+  expect(stepSize({ w: 96, ph: 96 }, 1)).toEqual({ w: 104, ph: 100 })
+  expect(stepSize({ w: 104, ph: 100 }, 1)).toEqual({ w: 112, ph: 100 })
+  expect(stepSize({ w: 152, ph: 100 }, 1)).toEqual({ w: 160, ph: 100 })
+  expect(stepSize({ w: 160, ph: 100 }, 1)).toEqual({ w: 160, ph: 100 }) // both at the limit: stays
+  // a narrow terminal: the width stops at the columns the pane has, then only the height grows
+  const cols = 80
+  expect(stepSize({ w: 72, ph: 72 }, 1, cols)).toEqual({ w: 80, ph: 80 })
+  expect(stepSize({ w: 80, ph: 80 }, 1, cols)).toEqual({ w: 80, ph: 88 })
+  expect(stepSize({ w: 80, ph: 88 }, 1, cols)).toEqual({ w: 80, ph: 96 })
+  expect(stepSize({ w: 80, ph: 96 }, 1, cols)).toEqual({ w: 80, ph: 100 })
+  expect(stepSize({ w: 80, ph: 100 }, 1, cols)).toEqual({ w: 80, ph: 100 })
+})
+
+test('크기 단계: 줄일 때도 한쪽이 최소에 닿으면 나머지만 줄어든다', () => {
+  expect(stepSize({ w: 24, ph: 24 }, -1)).toEqual({ w: 24, ph: 16 })
+  expect(stepSize({ w: 24, ph: 16 }, -1)).toEqual({ w: 24, ph: 12 })
+  expect(stepSize({ w: 24, ph: 12 }, -1)).toEqual({ w: 24, ph: 12 }) // the smallest stays
+  expect(stepSize({ w: 100, ph: 60 }, -1)).toEqual({ w: 92, ph: 52 })
+})
+
+test('크기 단계: 한계 밖의 크기를 거꾸로 움직이지 않는다', () => {
+  // a width typed wider than the terminal is not pulled back by +, and a height at its limit is not either
+  expect(stepSize({ w: 150, ph: 60 }, 1, 100)).toEqual({ w: 150, ph: 68 })
+  expect(stepSize({ w: 100, ph: 60 }, 1)).toEqual({ w: 108, ph: 68 }) // a typed size just steps
+  expect(stepSize({ w: 30, ph: 100 }, 1, 20)).toEqual({ w: 30, ph: 100 }) // a cap below MIN is read as MIN
 })
 
 const sprite = () => {
