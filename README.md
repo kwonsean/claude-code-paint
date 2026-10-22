@@ -118,6 +118,12 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 - Many terminals keep `Shift`+drag for selecting text and never pass it on. Use the `Line` tool there.
 - Claude Code or your terminal may use `Ctrl+Z` for something else. `z` and `y` always work.
 
+## Keys do nothing?
+
+1. Click the canvas once first: the keys only reach the canvas after a click gives it the focus (`Esc` hands the focus back).
+2. Restart Claude Code after an update: a running session keeps the old version.
+3. Run `/paint debug`, click the canvas and press the key. The status line then shows the last key and mouse event that actually **arrived**, for example `debug · key 3: {"key":"z","ctrl":true} · pointer 2: up left 9,8`. If a key you pressed never changes the `key` count, the terminal or Claude Code is keeping it and the canvas never sees it; use another key (`z`/`y`) or the chips. Run `/paint debug` again to turn it off.
+
 ## Development
 
 - `hooks/register.ts` is the hooks module, `hooks/canvas.ts` the surface module (it is self-contained, so its palette and limits are copies of the ones in `register.ts`; keep them in step).
@@ -131,6 +137,8 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 ---
 
 ## 한국어
+
+> 키가 안 먹을 때: 캔버스를 한 번 클릭한 뒤 누르세요. 업데이트한 뒤에는 Claude Code를 재시작해야 해요. `/paint debug` 를 켜고 캔버스를 클릭한 뒤 키를 누르면 상태 줄에 실제로 도착한 키와 마우스 입력이 나와요 (`key` 숫자가 안 늘면 터미널이나 Claude Code가 그 키를 가져가는 거예요). 다시 `/paint debug` 로 끄세요.
 
 패널을 그림판처럼 씁니다. `/paint` 로 열고 마우스를 끌어서 그립니다.
 

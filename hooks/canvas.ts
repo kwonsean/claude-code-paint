@@ -8,7 +8,7 @@
 import type { ClientPointerEvent } from 'claude-code'
 
 type Lang = 'ko' | 'en'
-type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean; picker?: boolean; palette?: unknown }
+type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean; picker?: boolean; debug?: boolean; palette?: unknown }
 type Tool = 'pen' | 'line' | 'fill'
 type Mirror = 'off' | 'lr' | 'ud' | 'both' // lr: left-right, ud: up-down
 type Store = {
@@ -29,6 +29,8 @@ type Store = {
   lang: Lang
   help: boolean // the help block under the canvas is shown
   picker: boolean // the color picker under the canvas is shown
+  debug: boolean // /paint debug: the status line shows the last key and pointer event that arrived
+  seen: { keys: number; pointers: number; key: string; pointer: string }
   mirror: Mirror // strokes, lines and fills are repeated across the middle
   palette: string[] // the ten colors, from the hooks module's props; index 0 is the eraser
 }
@@ -333,7 +335,7 @@ export default function Paint(props: Props, surface: any) {
   const ph = even(clamp(Math.round(props?.ph ?? 32), LIMITS.minPh, LIMITS.maxPh))
 
   if (surface.state === undefined) {
-    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, picker: props?.picker === true, mirror: 'off', palette: validPalette(props?.palette) }
+    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, picker: props?.picker === true, debug: props?.debug === true, seen: { keys: 0, pointers: 0, key: '-', pointer: '-' }, mirror: 'off', palette: validPalette(props?.palette) }
     reset(s, w, ph)
     let tick = 0
     // the state is a handle on the store the listeners below mutate; a new object asks for a redraw
@@ -395,6 +397,12 @@ export default function Paint(props: Props, surface: any) {
     }
 
     surface.onPointer((e: ClientPointerEvent) => {
+      if (s.debug && e.type !== 'move' && e.type !== 'enter' && e.type !== 'leave') {
+        // what arrived (moves are left out: they come by the dozen)
+        s.seen.pointers += 1
+        s.seen.pointer = `${e.type}${e.button ? ' ' + e.button : ''} ${e.x},${e.y}${e.shift ? ' shift' : ''}`
+        redraw()
+      }
       if (e.type === 'down') s.note = '' // a note (saved, copied...) stays until the next thing you do
       if (e.type === 'up' || e.type === 'leave') {
         s.last = null
@@ -475,8 +483,16 @@ export default function Paint(props: Props, surface: any) {
       }
     })
 
-    surface.onKey((e: { key: string; ctrl?: true; meta?: true; shift?: true }) => {
+    surface.onKey((incoming: { key: string; ctrl?: true; meta?: true; shift?: true }) => {
+      if (s.debug) {
+        s.seen.keys += 1
+        s.seen.key = JSON.stringify(incoming)
+        redraw()
+      }
       s.note = ''
+      // A terminal can send Ctrl+letter as the control character itself (Ctrl+Z is 0x1A): read it as Ctrl+z
+      const code = typeof incoming.key === 'string' && incoming.key.length === 1 ? incoming.key.charCodeAt(0) : 0
+      const e = code >= 1 && code <= 26 && code !== 9 && code !== 10 && code !== 13 ? { ...incoming, key: String.fromCharCode(code + 96), ctrl: true as const } : incoming
       if (!e.ctrl && !e.meta && e.key === 'R') { act('reset-all'); return } // Shift+R: every color back to its default
       const k = e.key.toLowerCase()
       if (e.ctrl || e.meta) {
@@ -510,6 +526,7 @@ export default function Paint(props: Props, surface: any) {
   s.lang = props?.lang === 'en' ? 'en' : 'ko'
   s.help = props?.help !== false
   s.picker = props?.picker === true
+  s.debug = props?.debug === true
   s.palette = validPalette(props?.palette)
   if (s.w !== w || s.ph !== ph) reset(s, w, ph)
   if (props?.note && props.note !== s.noteFrom) {
@@ -591,7 +608,7 @@ function view(s: Store, surface: any) {
   }
 
   const t = TEXT[s.lang]
-  const status = s.note || (s.help ? t.status(t.tools[s.tool], s.brush, s.color === 0 ? '0' : `${s.color} ${s.palette[s.color]}`, s.undo.length, s.redo.length, s.mirror === 'off' ? '' : t.mirrorName[s.mirror]) : t.hint)
+  const status = s.debug ? `debug · key ${s.seen.keys}: ${s.seen.key} · pointer ${s.seen.pointers}: ${s.seen.pointer}` : s.note || (s.help ? t.status(t.tools[s.tool], s.brush, s.color === 0 ? '0' : `${s.color} ${s.palette[s.color]}`, s.undo.length, s.redo.length, s.mirror === 'off' ? '' : t.mirrorName[s.mirror]) : t.hint)
 
   // The help block: a heading rule, then a label column and its text, one line each.
   const LABEL = 11

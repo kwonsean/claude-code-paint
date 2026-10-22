@@ -106,6 +106,8 @@ const MSG = {
     toFile: (file: string) => `클립보드를 못 써서 파일로 저장했어요: ${file}`,
     failed: (err: string) => `복사도 저장도 못 했어요 (${err}). /paint export 로 채팅에서 가져가세요`,
     saved: (file: string, n: number) => `저장했어요: ${file} (${n})`,
+    debugOn: '진단 모드 켬: 캔버스를 클릭한 뒤 키를 눌러 보세요. 맨 아랫줄(상태 줄)에 마지막으로 도착한 키와 마우스 입력이 나와요. 다시 /paint debug 로 끄세요',
+    debugOff: '진단 모드 끔',
     colorLabel: '색 ',
     colorPlaceholder: '예: #ff8800 (고른 색) · 3 #ff8800 · reset',
     colorUsage: '색 지정: #ff8800 (고른 색), 3 #ff8800 (3번 색), rgb(255,136,0), reset [번호|all] · 번호는 1-9예요 (0은 지우개라 바꿀 수 없어요)',
@@ -137,6 +139,8 @@ const MSG = {
     toFile: (file: string) => `No clipboard here, so it was saved to a file: ${file}`,
     failed: (err: string) => `Could neither copy nor save (${err}). Use /paint export to take it from the chat`,
     saved: (file: string, n: number) => `Saved: ${file} (${n})`,
+    debugOn: 'Debug on: click the canvas, then press keys. The status line shows the last key and pointer event that arrived. Run /paint debug again to turn it off',
+    debugOff: 'Debug off',
     colorLabel: 'Color ',
     colorPlaceholder: 'e.g. #ff8800 (the selected one) · 3 #ff8800 · reset',
     colorUsage: 'Colors: #ff8800 (the selected one), 3 #ff8800 (color 3), rgb(255,136,0), reset [number|all] · numbers are 1-9 (0 is the eraser and cannot change)',
@@ -154,7 +158,9 @@ const MSG = {
   },
 } as const
 
-const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, picker: pickerOpen, palette, ...(note ? { note } : {}) })
+let debugOn = false // /paint debug: the canvas shows the last key and pointer event it received
+
+const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, picker: pickerOpen, palette, ...(debugOn ? { debug: true } : {}), ...(note ? { note } : {}) })
 
 /** "en", "english", "영문" … → 'en'; "ko", "korean", "한국어" … → 'ko'; null for anything else. */
 export function parseLang(word: string): Lang | null {
@@ -291,6 +297,12 @@ export const register: Register = on => {
     const word = e.args.trim().toLowerCase()
     const asked = parseLang(word.replace(/^lang(uage)?\s*/, ''))
     if (asked) lang = asked
+    else if (word === 'debug') {
+      debugOn = !debugOn
+      await $.ui.open({ id: PANE, title: '🎨 Paint', focus: true, closeOnEscape: true, rows: paneRows(size.ph) })
+      $.ui.invalidate('ui.render')
+      return { text: debugOn ? MSG[lang].debugOn : MSG[lang].debugOff }
+    }
     else if (word === 'export') return { text: lastExport || MSG[lang].nothingExported }
     else if (/^(colou?rs?|palette)(\s|$)/.test(word)) {
       const rest = word.replace(/^(colou?rs?|palette)\s*/, '')
