@@ -78,9 +78,12 @@ export function stepSize(from: { w: number; ph: number }, dir: 1 | -1, maxW: num
 // Rows the help block under the canvas takes (canvas.ts draws exactly this many while it is open).
 export const HELP_ROWS = 10
 let helpOpen = true
+// Rows the color picker under the canvas takes (canvas.ts draws exactly this many while it is open).
+export const PICKER_ROWS = 5
+let pickerOpen = false
 
-// The pane's rows: the canvas, its 4 menu rows and status line, the size and color fields, and the help block when open.
-const paneRows = (ph: number) => ph / 2 + 9 + (helpOpen ? HELP_ROWS : 0)
+// The pane's rows: the canvas, its 4 menu rows and status line, the size and color fields, and the help block and color picker when open.
+const paneRows = (ph: number) => ph / 2 + 9 + (helpOpen ? HELP_ROWS : 0) + (pickerOpen ? PICKER_ROWS : 0)
 
 export type Lang = 'ko' | 'en'
 let lang: Lang = 'ko'
@@ -151,7 +154,7 @@ const MSG = {
   },
 } as const
 
-const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, palette, ...(note ? { note } : {}) })
+const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, picker: pickerOpen, palette, ...(note ? { note } : {}) })
 
 /** "en", "english", "영문" … → 'en'; "ko", "korean", "한국어" … → 'ko'; null for anything else. */
 export function parseLang(word: string): Lang | null {
@@ -320,7 +323,7 @@ export const register: Register = on => {
     return Box({
       flexDirection: 'column',
       children: [
-        Client({ key: 'canvas', module: './canvas.ts', props: props(), width: Math.max(size.w, MENU_WIDTH), height: size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) }),
+        Client({ key: 'canvas', module: './canvas.ts', props: props(), width: Math.max(size.w, MENU_WIDTH), height: size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) + (pickerOpen ? PICKER_ROWS : 0) }),
         Input({
           key: 'size',
           label: MSG[lang].sizeLabel,
@@ -351,7 +354,7 @@ export const register: Register = on => {
   })
 
   on('ui.message', async ($, e) => {
-    const data = e.data as { save?: unknown; export?: unknown; grid?: unknown; resize?: unknown; lang?: unknown; help?: unknown; select?: unknown; w?: unknown; ph?: unknown } | null
+    const data = e.data as { save?: unknown; export?: unknown; grid?: unknown; resize?: unknown; lang?: unknown; help?: unknown; picker?: unknown; setColor?: unknown; select?: unknown; w?: unknown; ph?: unknown } | null
     if (e.element !== 'canvas' || !data || typeof data !== 'object') return {}
     // posted by code on the surface: check it is the canvas we drew before acting on it
     if (data.w !== size.w || data.ph !== size.ph) return {}
@@ -360,6 +363,23 @@ export const register: Register = on => {
     if (typeof data.select === 'number' && Number.isInteger(data.select) && data.select >= 0 && data.select <= 9) {
       selected = data.select // which swatch a bare color entry changes
       return {}
+    }
+
+    if (typeof data.picker === 'boolean') {
+      pickerOpen = data.picker
+      await applySize($, size) // the pane and the region change height
+      return { props: props() }
+    }
+
+    if (data.setColor && typeof data.setColor === 'object') {
+      // a click in the picker: posted by code on the surface, so check it names a real swatch and a real color
+      const { index, hex } = data.setColor as { index?: unknown; hex?: unknown }
+      if (typeof index !== 'number' || !Number.isInteger(index) || index < 1 || index > 9 || typeof hex !== 'string') return {}
+      const color = parseColor(hex)
+      if (!color || !/^#[0-9a-f]{6}$/i.test(hex)) return {}
+      palette = applyColorEdit(palette, { kind: 'set', index, hex: color })
+      selected = index
+      return { props: props(t.colorSet(index, color)) }
     }
 
     if (typeof data.help === 'boolean') {

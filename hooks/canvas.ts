@@ -8,7 +8,7 @@
 import type { ClientPointerEvent } from 'claude-code'
 
 type Lang = 'ko' | 'en'
-type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean; palette?: unknown }
+type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean; picker?: boolean; palette?: unknown }
 type Tool = 'pen' | 'line' | 'fill'
 type Mirror = 'off' | 'lr' | 'ud' | 'both' // lr: left-right, ud: up-down
 type Store = {
@@ -28,11 +28,26 @@ type Store = {
   noteFrom: string
   lang: Lang
   help: boolean // the help block under the canvas is shown
+  picker: boolean // the color picker under the canvas is shown
   mirror: Mirror // strokes, lines and fills are repeated across the middle
   palette: string[] // the ten colors, from the hooks module's props; index 0 is the eraser
 }
 
 const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#8b5cf6', '#ec4899', '#ffffff', '#000000']
+const PICKER_ROWS = 5 // the picker: a heading and four rows of colors; the hooks module sizes the region by this
+const PICKER_COLS = 16
+const PICKER_CELL = 4 // columns per color in the picker
+
+// The colors the picker offers: sixteen hues in a light, a medium and a dark shade, then sixteen grays (white to black).
+const HUES: [string, string, string][] = [
+  ['#fca5a5', '#ef4444', '#991b1b'], ['#fdba74', '#f97316', '#9a3412'], ['#fcd34d', '#f59e0b', '#92400e'], ['#fde047', '#eab308', '#854d0e'],
+  ['#bef264', '#84cc16', '#3f6212'], ['#86efac', '#22c55e', '#166534'], ['#6ee7b7', '#10b981', '#065f46'], ['#5eead4', '#14b8a6', '#115e59'],
+  ['#67e8f9', '#06b6d4', '#155e75'], ['#7dd3fc', '#0ea5e9', '#075985'], ['#93c5fd', '#3b82f6', '#1e40af'], ['#a5b4fc', '#6366f1', '#3730a3'],
+  ['#c4b5fd', '#8b5cf6', '#5b21b6'], ['#d8b4fe', '#a855f7', '#6b21a8'], ['#f9a8d4', '#ec4899', '#9d174d'], ['#fda4af', '#f43f5e', '#9f1239'],
+]
+const GRAYS = Array.from({ length: PICKER_COLS }, (_, i) => '#' + Math.round(255 * (1 - i / (PICKER_COLS - 1))).toString(16).padStart(2, '0').repeat(3))
+const PICKER_COLORS: string[][] = [HUES.map(h => h[0]), HUES.map(h => h[1]), HUES.map(h => h[2]), GRAYS]
+
 /** The palette from props when it is ten colors (index 0 empty, 1-9 as #rrggbb); the default one otherwise. */
 function validPalette(p: unknown): string[] {
   if (!Array.isArray(p) || p.length !== 10) return [...PALETTE]
@@ -93,13 +108,16 @@ const TEXT = {
       ['도구', 'p 펜 · l 직선 · f 채우기 · b 굵기 바꾸기 (1-4)'],
       ['대칭', 'm 키로 좌우 · 상하 · 4방향 · 끔 (반대쪽에도 찍혀요)'],
       ['직선', 'l 직선 도구, 또는 Shift 누르고 드래그 (가로·세로·45°)'],
-      ['색', '1-9 색 고르기 · 0 지우개 · 색 바꾸기는 아래 입력칸'],
+      ['색', '1-9 색 · 0 지우개 · k 팔레트로 색 바꾸기 · 아래 입력칸'],
       ['되돌리기', 'z 또는 Ctrl+Z 되돌리기 · y, Ctrl+Y, Shift+Z 다시'],
       ['크기', `[ ] 또는 − + 칩, 아래 입력칸 (가로 ${LIMITS.minW}-${LIMITS.maxW}, 세로 ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['내보내기', 'e SVG 저장 · j JS 코드 복사 · a ASCII 복사 · c 지우기'],
       ['참고', '키는 캔버스를 한 번 클릭해야 먹어요 · ? 로 접기'],
     ],
     tools: { pen: '펜', line: '직선', fill: '채우기' },
+    pickerChip: ' ◐ 색 편집 ',
+    pickerHead: (n: number, hex: string) => `색 ${n} 을(를) 바꿔요 · 아래에서 고르세요 (지금 ${hex})`,
+    pickerEraser: '먼저 1-9번 색을 고르세요 (0은 지우개라 바꿀 수 없어요)',
     mirrorLabel: '대칭', mirrorChips: { off: ' 끔 ', lr: ' ↔ 좌우 ', ud: ' ↕ 상하 ', both: ' ✛ 4방향 ' },
     mirrorName: { off: '끔', lr: '좌우', ud: '상하', both: '4방향' },
     status: (tool: string, brush: number, color: string, undo: number, redo: number, mirror: string) => `${tool} · 굵기 ${brush} · 색 ${color}${mirror ? ` · 대칭 ${mirror}` : ''} · ↶ ${undo} · ↷ ${redo}`,
@@ -114,13 +132,16 @@ const TEXT = {
       ['Tools', 'p pen · l line · f fill · b brush size (1-4)'],
       ['Mirror', 'm cycles left-right / up-down / both / off'],
       ['Line', 'l line tool, or hold Shift while dragging (0/45/90°)'],
-      ['Colors', '1-9 pick · 0 eraser · change them in the Color field'],
+      ['Colors', '1-9 pick · 0 eraser · k picker · or the Color field'],
       ['Undo', 'z or Ctrl+Z undo · y, Ctrl+Y or Shift+Z redo'],
       ['Size', `[ ] or − +, or the field below (w ${LIMITS.minW}-${LIMITS.maxW} · h ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['Output', 'e save SVG · j copy JS code · a copy ASCII · c clear'],
       ['Note', 'Click the canvas once so keys work · ? folds help'],
     ],
     tools: { pen: 'Pen', line: 'Line', fill: 'Fill' },
+    pickerChip: ' ◐ Edit color ',
+    pickerHead: (n: number, hex: string) => `Click a color to use as color ${n} (now ${hex})`,
+    pickerEraser: 'Pick color 1-9 first (0 is the eraser and cannot change)',
     mirrorLabel: 'Mirror', mirrorChips: { off: ' Off ', lr: ' ↔ Left-right ', ud: ' ↕ Up-down ', both: ' ✛ Both ' },
     mirrorName: { off: 'off', lr: 'left-right', ud: 'up-down', both: 'both' },
     status: (tool: string, brush: number, color: string, undo: number, redo: number, mirror: string) => `${tool} · Brush ${brush} · Color ${color}${mirror ? ` · Mirror ${mirror}` : ''} · ↶ ${undo} · ↷ ${redo}`,
@@ -154,12 +175,13 @@ const rowFile = (s: Store): Chip[][] => [
   [{ id: 'lang', label: TEXT[s.lang].lang, kind: 'lang' }],
 ]
 
-// Row 3: the mirror modes, one of them lit; a dim word in front says what the row is.
+// Row 3: the mirror modes, one of them lit (a dim word in front says what the row is), and the color picker's switch.
 const rowMirror = (s: Store): Chip[][] => [
   [
     { id: 'label', label: TEXT[s.lang].mirrorLabel, kind: 'label' },
     ...(['off', 'lr', 'ud', 'both'] as const).map(m => ({ id: `mirror-${m}`, label: TEXT[s.lang].mirrorChips[m], kind: 'tool' as const, on: s.mirror === m })),
   ],
+  [{ id: 'picker', label: TEXT[s.lang].pickerChip, kind: 'tool', on: s.picker }],
 ]
 
 /** Where each chip of a row starts and ends (columns). */
@@ -289,7 +311,7 @@ export default function Paint(props: Props, surface: any) {
   const ph = even(clamp(Math.round(props?.ph ?? 32), LIMITS.minPh, LIMITS.maxPh))
 
   if (surface.state === undefined) {
-    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, mirror: 'off', palette: validPalette(props?.palette) }
+    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, picker: props?.picker === true, mirror: 'off', palette: validPalette(props?.palette) }
     reset(s, w, ph)
     let tick = 0
     // the state is a handle on the store the listeners below mutate; a new object asks for a redraw
@@ -329,6 +351,9 @@ export default function Paint(props: Props, surface: any) {
         s.mirror = s.mirror === 'off' ? 'lr' : s.mirror === 'lr' ? 'ud' : s.mirror === 'ud' ? 'both' : 'off'
       } else if (id.startsWith('mirror-')) {
         s.mirror = id.slice('mirror-'.length) as Mirror
+      } else if (id === 'picker') {
+        // the region's height depends on it, and that is the hooks module's to set
+        surface.post({ picker: !s.picker, w: s.w, ph: s.ph })
       } else if (id === 'help') {
         // the region's height depends on it, and that is the hooks module's to set
         surface.post({ help: !s.help, w: s.w, ph: s.ph })
@@ -356,7 +381,10 @@ export default function Paint(props: Props, surface: any) {
         if (e.y === 0) {
           const i = Math.floor(x / PALETTE_CHIP)
           const size = sizeSpans(s)
-          if (x >= 0 && x < SWATCHES_END) { choose(i); redraw() }
+          if (x >= 0 && x < SWATCHES_END) {
+            if (i === s.color && i !== 0) act('picker') // clicking the chosen swatch again edits it
+            else { choose(i); redraw() }
+          }
           else if (x >= size.smaller.from && x < size.smaller.to) act('smaller')
           else if (x >= size.bigger.from && x < size.bigger.to) act('bigger')
           else if (x >= size.help.from && x < size.help.to) act('help')
@@ -364,6 +392,14 @@ export default function Paint(props: Props, surface: any) {
           const hit = layout(e.y === 1 ? rowTools(s) : e.y === 2 ? rowFile(s) : rowMirror(s)).find(t => t.id !== 'label' && x >= t.from && x < t.to)
           if (hit) act(hit.id)
         }
+        return
+      }
+      // a click in the picker under the canvas: that color goes to the chosen swatch
+      const pickerTop = TOP + s.ph / 2 + 2 // the canvas, the status row, the picker's heading
+      if (s.picker && e.type === 'down' && e.button === 'left' && e.y >= pickerTop && e.y < pickerTop + PICKER_ROWS - 1) {
+        const col = Math.floor((e.fine?.x ?? e.x) / PICKER_CELL)
+        const hex = col >= 0 && col < PICKER_COLS ? PICKER_COLORS[e.y - pickerTop]?.[col] : undefined
+        if (hex && s.color !== 0) surface.post({ setColor: { index: s.color, hex }, w: s.w, ph: s.ph })
         return
       }
       if (e.button !== 'left' && e.button !== 'right') return
@@ -428,6 +464,7 @@ export default function Paint(props: Props, surface: any) {
       else if (k === 'j') act('js')
       else if (k === 'a') act('ascii')
       else if (k === '?' || k === 'h') act('help')
+      else if (k === 'k') act('picker')
       else if (k === '[') act('smaller')
       else if (k === ']') act('bigger')
     })
@@ -437,6 +474,7 @@ export default function Paint(props: Props, surface: any) {
   const s: Store = (surface.state as { store: Store }).store
   s.lang = props?.lang === 'en' ? 'en' : 'ko'
   s.help = props?.help !== false
+  s.picker = props?.picker === true
   s.palette = validPalette(props?.palette)
   if (s.w !== w || s.ph !== ph) reset(s, w, ph)
   if (props?.note && props.note !== s.noteFrom) {
@@ -521,6 +559,15 @@ function view(s: Store, surface: any) {
 
   // The help block: a heading rule, then a label column and its text, one line each.
   const LABEL = 11
+  // The picker: a line saying what a click does, then the colors, a mark on the one the chosen swatch has now.
+  const current = s.palette[s.color]
+  const pickerRows = !s.picker ? [] : [
+    Text({ dimColor: true, wrap: 'truncate-end', children: [s.color === 0 ? t.pickerEraser : t.pickerHead(s.color, current!)] }),
+    ...PICKER_COLORS.map((row: string[]) =>
+      Text({ children: row.map((hex: string) => Text({ backgroundColor: hex, color: textOn(hex), bold: true, children: [hex === current && s.color !== 0 ? ' ●  ' : '    '] })) }),
+    ),
+  ]
+
   const helpRows = !s.help ? [] : [
     Text({ dimColor: true, wrap: 'truncate-end', children: [`── ${t.helpTitle} `.padEnd(1) + '─'.repeat(Math.max(2, 64 - cols(`── ${t.helpTitle} `)))] }),
     ...t.help.map(([label, text]: readonly [string, string]) =>
@@ -533,6 +580,6 @@ function view(s: Store, surface: any) {
 
   return Box({
     flexDirection: 'column',
-    children: [palette, toolsRow, exportRow, mirrorRow, ...rows, Text({ dimColor: !s.note, bold: !!s.note, wrap: 'truncate-end', children: [status] }), ...helpRows],
+    children: [palette, toolsRow, exportRow, mirrorRow, ...rows, Text({ dimColor: !s.note, bold: !!s.note, wrap: 'truncate-end', children: [status] }), ...pickerRows, ...helpRows],
   })
 }
