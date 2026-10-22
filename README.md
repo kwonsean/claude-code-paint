@@ -116,8 +116,7 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 
 - Mouse drags need a terminal that passes mouse events to the program. Sub-cell precision (smoother vertical position) comes from terminals that report pixels: kitty, Ghostty, iTerm2, WezTerm. Elsewhere the top pixel of a character cell is used.
 - Many terminals keep `Shift`+drag for selecting text and never pass it on. Use the `Line` tool there.
-- Claude Code or your terminal may use `Ctrl+Z` for something else (on macOS and Linux it normally suspends a program). `z` and `y` always work.
-- **Undo and redo keys:** `Ctrl+Z` / `Ctrl+Y` (and `Ctrl+Shift+Z` where the terminal reports Shift) are handled everywhere the terminal passes them on, which includes Windows and Linux as well as macOS. `Alt`/`Option`+`Z` is accepted the same way (what a terminal calls the meta key). **`Cmd+Z` on a Mac cannot be relied on:** the terminal app normally keeps it for its own Edit menu and never sends it to the program, and the key event the mod receives has no separate flag for the Cmd key. So on a Mac use `z`, `y` or the chips (or `Ctrl+Z` if your terminal passes it).
+- Claude Code or your terminal may use `Ctrl+Z` for something else. `z` and `y` always work.
 
 ## Development
 
