@@ -14,7 +14,7 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
   <img src="docs/preview.png" alt="The paint pane in left-right mirror mode with a customized palette: a symmetric pixel-art butterfly drawn on the left half only, the Mirror menu row, the status line, the open color picker, the help block and the Size and Color fields" width="560">
 </p>
 
-<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the butterfly drawn through its mouse handlers on the left half only (mirror mode on), using a customized palette, with the color picker open under the canvas. Fonts and colors will differ in your terminal.</sub></p>
+<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the butterfly drawn through its mouse handlers on the left half only (mirror mode on), using a customized palette, with the color picker (and its reset chips) open under the canvas. Fonts and colors will differ in your terminal.</sub></p>
 
 > **Status: early (0.9).** It was built against Claude Code's mod API and tested with a simulated engine and the API's type definitions. How mouse drags, `Shift` and `Ctrl+Z` reach it depends on your terminal (see [Terminals](#terminals)). Issues and reports of what works where are welcome.
 
@@ -34,6 +34,7 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 |---|---|
 | Draw / erase | drag with the left / right mouse button |
 | Colors | `1`-`9`, `0` is the eraser (or click the swatches). Change a color: `k` opens the color picker, see [Custom colors](#custom-colors) |
+| Reset colors | `r` puts the chosen swatch back to its default, `Shift+R` all of them (or the reset chips in the picker) |
 | Tools | `p` pen, `l` line, `f` fill, `b` brush size (1-4) |
 | Mirror | `m` cycles off → left-right → up-down → both → off, or click the chips on the fourth menu row |
 | Straight line | the `Line` tool (`l`), or hold `Shift` while dragging (snaps to 0 / 45 / 90°) |
@@ -51,7 +52,9 @@ The last JS/ASCII export can be printed in the chat with `/paint export`. If the
 
 Each of the nine palette colors can be set to any color you like.
 
-**Pick from a palette.** Choose a swatch (click it, or press its number), then open the color picker with the `◐ Edit color` chip on the fourth menu row, with `k`, or by clicking the chosen swatch once more. A block of 64 colors opens under the canvas: sixteen hues in a light, a medium and a dark shade, then sixteen grays from white to black. Click one and it becomes the chosen swatch's color. The picker's first line says which swatch you are changing and what color it has now, and a dot marks that color if it is one of the 64. The eraser (`0`) cannot change, so the picker asks you to choose a swatch from 1-9 first. Close it with the same chip or `k`.
+**Pick from a palette.** Choose a swatch (click it, or press its number), then open the color picker with the `◐ Edit color` chip on the fourth menu row, with `k`, or by clicking the chosen swatch once more. A block of 64 colors opens under the canvas: sixteen hues in a light, a medium and a dark shade, then sixteen grays from white to black, and a row of reset chips below them. Click one and it becomes the chosen swatch's color. The picker's first line says which swatch you are changing and what color it has now, and a dot marks that color if it is one of the 64. The eraser (`0`) cannot change, so the picker asks you to choose a swatch from 1-9 first. Close it with the same chip or `k`.
+
+**Taking colors back.** The last row of the picker shows the default of the chosen swatch (`Default for color 3: #facc15`) and two chips, `↺ Reset this color` and `↺ Reset all`. A chip is drawn dim when it would change nothing (the swatch is already its default, or no color has been changed), and clicking a dim chip does nothing. The keys work without opening the picker: `r` resets the chosen swatch and `Shift+R` resets every swatch. Because the picture stores swatch numbers, resetting a color also turns the pixels drawn with it back to the default color. Changing or resetting colors is not part of undo.
 
 **Or type a color.** Enter it in the **Color** field under the canvas, or use the command:
 
@@ -61,7 +64,7 @@ Each of the nine palette colors can be set to any color you like.
 | `3 #ff8800` or `3=#ff8800` | swatch 3 becomes this color |
 | `#f80`, `ff8800`, `rgb(255,136,0)` | other ways to write a color (the `#` is optional, three-digit hex is expanded) |
 | `reset` / `reset all` | every color back to the defaults |
-| `reset 3` | only swatch 3 back to its default |
+| `reset 3` | only swatch 3 back to its default (the same as the chips and keys above) |
 | `/paint color` | lists the nine colors (`/paint color 3 #ff8800` changes one, `/paint palette …` and `/paint colors …` also work) |
 
 Things to know:
@@ -140,6 +143,7 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
   - 켜 있는 동안 가운데 줄(축)의 빈 픽셀이 조금 밝게 보이고, 상태 줄에 `대칭 좌우` 같은 표시가 나와요. 한 번 되돌리기로 대칭 획 전체가 사라져요. 대칭 설정은 되돌리기 대상이 아니에요.
 - 색 지정: 팔레트 9색을 원하는 색으로 바꿀 수 있어요.
   - **팔레트에서 고르기**: 색 견본을 고른 뒤(클릭하거나 숫자 키) 네 번째 메뉴 줄의 `◐ 색 편집` 칩, `k` 키, 또는 이미 고른 견본을 한 번 더 클릭하면 캔버스 아래에 64색 선택 팔레트가 열려요. 16가지 색상의 밝은색·보통·진한색 세 줄과 흰색에서 검정까지 회색 한 줄이에요. 누르면 바로 그 견본의 색이 돼요. 맨 윗줄에 어느 견본을 바꾸는 중인지와 현재 색이 나오고, 현재 색이 64색 중 하나면 ● 표시가 붙어요. 지우개(0)는 바꿀 수 없어서 1-9번을 먼저 고르라고 안내해요.
+  - **기본값으로 되돌리기**: 선택 팔레트의 맨 아랫줄에 고른 견본의 기본색(`색 3 기본값: #facc15`)과 `↺ 이 색 초기화`, `↺ 모두 초기화` 칩이 있어요. 바꿀 게 없으면(이미 기본색이거나 바꾼 색이 하나도 없으면) 칩이 흐리게 보이고 눌러도 아무 일도 안 일어나요. 팔레트를 열지 않아도 `r` 은 고른 견본을, `Shift+R` 은 모든 견본을 기본값으로 되돌려요. 그림은 견본 번호를 기억하기 때문에, 초기화하면 그 색으로 그린 픽셀도 기본색으로 돌아가요. 색 변경과 초기화는 되돌리기 대상이 아니에요.
   - **직접 입력하기**: 캔버스 아래 **색** 입력칸에 입력하거나 `/paint color 3 #ff8800` 명령을 쓰세요.
   - `#ff8800` 은 고른 색, `3 #ff8800` 은 3번 색을 바꿔요. `#f80`, `ff8800`, `rgb(255,136,0)` 도 돼요.
   - `reset` 은 모든 색을, `reset 3` 은 3번 색만 기본값으로 되돌려요. `/paint color` 는 현재 색 목록을 보여 줘요.

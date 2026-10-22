@@ -79,7 +79,7 @@ export function stepSize(from: { w: number; ph: number }, dir: 1 | -1, maxW: num
 export const HELP_ROWS = 10
 let helpOpen = true
 // Rows the color picker under the canvas takes (canvas.ts draws exactly this many while it is open).
-export const PICKER_ROWS = 5
+export const PICKER_ROWS = 6
 let pickerOpen = false
 
 // The pane's rows: the canvas, its 4 menu rows and status line, the size and color fields, and the help block and color picker when open.
@@ -354,7 +354,7 @@ export const register: Register = on => {
   })
 
   on('ui.message', async ($, e) => {
-    const data = e.data as { save?: unknown; export?: unknown; grid?: unknown; resize?: unknown; lang?: unknown; help?: unknown; picker?: unknown; setColor?: unknown; select?: unknown; w?: unknown; ph?: unknown } | null
+    const data = e.data as { save?: unknown; export?: unknown; grid?: unknown; resize?: unknown; lang?: unknown; help?: unknown; picker?: unknown; setColor?: unknown; resetColor?: unknown; select?: unknown; w?: unknown; ph?: unknown } | null
     if (e.element !== 'canvas' || !data || typeof data !== 'object') return {}
     // posted by code on the surface: check it is the canvas we drew before acting on it
     if (data.w !== size.w || data.ph !== size.ph) return {}
@@ -380,6 +380,13 @@ export const register: Register = on => {
       palette = applyColorEdit(palette, { kind: 'set', index, hex: color })
       selected = index
       return { props: props(t.colorSet(index, color)) }
+    }
+
+    if (data.resetColor === 'all' || (typeof data.resetColor === 'number' && Number.isInteger(data.resetColor) && data.resetColor >= 1 && data.resetColor <= 9)) {
+      // a reset chip or key on the canvas: one swatch, or all of them, back to the defaults
+      const which = data.resetColor as number | 'all'
+      palette = applyColorEdit(palette, { kind: 'reset', index: which })
+      return { props: props(t.colorReset(which)) }
     }
 
     if (typeof data.help === 'boolean') {

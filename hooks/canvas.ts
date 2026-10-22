@@ -34,7 +34,7 @@ type Store = {
 }
 
 const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#8b5cf6', '#ec4899', '#ffffff', '#000000']
-const PICKER_ROWS = 5 // the picker: a heading and four rows of colors; the hooks module sizes the region by this
+const PICKER_ROWS = 6 // the picker: a heading, four rows of colors and a row of reset chips; the hooks module sizes the region by this
 const PICKER_COLS = 16
 const PICKER_CELL = 4 // columns per color in the picker
 
@@ -76,6 +76,7 @@ const UI = {
   action: '#1d3b52', actionText: '#a9dcff',
   danger: '#4a2328', dangerText: '#ffb3ba',
   lang: '#3b3350', langText: '#dccdff',
+  off: '#23262c', offText: '#6b7280',
 }
 const SEP = ' │ ' // between groups of chips (3 columns)
 const TOP = 4 // rows above the canvas
@@ -108,7 +109,7 @@ const TEXT = {
       ['도구', 'p 펜 · l 직선 · f 채우기 · b 굵기 바꾸기 (1-4)'],
       ['대칭', 'm 키로 좌우 · 상하 · 4방향 · 끔 (반대쪽에도 찍혀요)'],
       ['직선', 'l 직선 도구, 또는 Shift 누르고 드래그 (가로·세로·45°)'],
-      ['색', '1-9 색 · 0 지우개 · k 팔레트로 색 바꾸기 · 아래 입력칸'],
+      ['색', '1-9 색 · 0 지우개 · k 팔레트 · r 초기화 · R 전부 초기화'],
       ['되돌리기', 'z 또는 Ctrl+Z 되돌리기 · y, Ctrl+Y, Shift+Z 다시'],
       ['크기', `[ ] 또는 − + 칩, 아래 입력칸 (가로 ${LIMITS.minW}-${LIMITS.maxW}, 세로 ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['내보내기', 'e SVG 저장 · j JS 코드 복사 · a ASCII 복사 · c 지우기'],
@@ -116,6 +117,10 @@ const TEXT = {
     ],
     tools: { pen: '펜', line: '직선', fill: '채우기' },
     pickerChip: ' ◐ 색 편집 ',
+    pickerDefault: (n: number, hex: string) => `색 ${n} 기본값: ${hex}`,
+    pickerNoDefault: '(지우개는 색이 없어요)',
+    resetOne: ' ↺ 이 색 초기화 ',
+    resetAll: ' ↺ 모두 초기화 ',
     pickerHead: (n: number, hex: string) => `색 ${n} 을(를) 바꿔요 · 아래에서 고르세요 (지금 ${hex})`,
     pickerEraser: '먼저 1-9번 색을 고르세요 (0은 지우개라 바꿀 수 없어요)',
     mirrorLabel: '대칭', mirrorChips: { off: ' 끔 ', lr: ' ↔ 좌우 ', ud: ' ↕ 상하 ', both: ' ✛ 4방향 ' },
@@ -132,7 +137,7 @@ const TEXT = {
       ['Tools', 'p pen · l line · f fill · b brush size (1-4)'],
       ['Mirror', 'm cycles left-right / up-down / both / off'],
       ['Line', 'l line tool, or hold Shift while dragging (0/45/90°)'],
-      ['Colors', '1-9 pick · 0 eraser · k picker · or the Color field'],
+      ['Colors', '1-9 pick · 0 eraser · k picker · r reset · R reset all'],
       ['Undo', 'z or Ctrl+Z undo · y, Ctrl+Y or Shift+Z redo'],
       ['Size', `[ ] or − +, or the field below (w ${LIMITS.minW}-${LIMITS.maxW} · h ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['Output', 'e save SVG · j copy JS code · a copy ASCII · c clear'],
@@ -140,6 +145,10 @@ const TEXT = {
     ],
     tools: { pen: 'Pen', line: 'Line', fill: 'Fill' },
     pickerChip: ' ◐ Edit color ',
+    pickerDefault: (n: number, hex: string) => `Default for color ${n}: ${hex}`,
+    pickerNoDefault: '(the eraser has no color)',
+    resetOne: ' ↺ Reset this color ',
+    resetAll: ' ↺ Reset all ',
     pickerHead: (n: number, hex: string) => `Click a color to use as color ${n} (now ${hex})`,
     pickerEraser: 'Pick color 1-9 first (0 is the eraser and cannot change)',
     mirrorLabel: 'Mirror', mirrorChips: { off: ' Off ', lr: ' ↔ Left-right ', ud: ' ↕ Up-down ', both: ' ✛ Both ' },
@@ -148,7 +157,7 @@ const TEXT = {
   },
 } as const
 
-type Kind = 'plain' | 'tool' | 'action' | 'danger' | 'lang' | 'label'
+type Kind = 'plain' | 'tool' | 'action' | 'danger' | 'lang' | 'label' | 'off' // off: a chip with nothing to do right now
 type Chip = { id: string; label: string; kind: Kind; on?: boolean }
 
 // The two chip rows as groups: a separator sits between groups, one space between chips in a group.
@@ -182,6 +191,19 @@ const rowMirror = (s: Store): Chip[][] => [
     ...(['off', 'lr', 'ud', 'both'] as const).map(m => ({ id: `mirror-${m}`, label: TEXT[s.lang].mirrorChips[m], kind: 'tool' as const, on: s.mirror === m })),
   ],
   [{ id: 'picker', label: TEXT[s.lang].pickerChip, kind: 'tool', on: s.picker }],
+]
+
+/** True when the swatch (or, with `index` null, any swatch) is not its default color. */
+const isCustom = (s: Store, index: number | null) => (index === null ? s.palette.some((c, i) => c !== PALETTE[i]) : index >= 1 && s.palette[index] !== PALETTE[index])
+
+// The picker's last row: the default of the chosen swatch, and chips to take back that swatch's color or all of them.
+// A chip that would change nothing is drawn dim and does nothing.
+const rowReset = (s: Store): Chip[][] => [
+  [
+    { id: 'label', label: s.color === 0 ? TEXT[s.lang].pickerNoDefault : TEXT[s.lang].pickerDefault(s.color, PALETTE[s.color]!), kind: 'label' },
+    { id: 'reset-one', label: TEXT[s.lang].resetOne, kind: isCustom(s, s.color) ? 'plain' : 'off' },
+    { id: 'reset-all', label: TEXT[s.lang].resetAll, kind: isCustom(s, null) ? 'plain' : 'off' },
+  ],
 ]
 
 /** Where each chip of a row starts and ends (columns). */
@@ -351,6 +373,10 @@ export default function Paint(props: Props, surface: any) {
         s.mirror = s.mirror === 'off' ? 'lr' : s.mirror === 'lr' ? 'ud' : s.mirror === 'ud' ? 'both' : 'off'
       } else if (id.startsWith('mirror-')) {
         s.mirror = id.slice('mirror-'.length) as Mirror
+      } else if (id === 'reset-one') {
+        if (isCustom(s, s.color)) surface.post({ resetColor: s.color, w: s.w, ph: s.ph })
+      } else if (id === 'reset-all') {
+        if (isCustom(s, null)) surface.post({ resetColor: 'all', w: s.w, ph: s.ph })
       } else if (id === 'picker') {
         // the region's height depends on it, and that is the hooks module's to set
         surface.post({ picker: !s.picker, w: s.w, ph: s.ph })
@@ -397,6 +423,13 @@ export default function Paint(props: Props, surface: any) {
       // a click in the picker under the canvas: that color goes to the chosen swatch
       const pickerTop = TOP + s.ph / 2 + 2 // the canvas, the status row, the picker's heading
       if (s.picker && e.type === 'down' && e.button === 'left' && e.y >= pickerTop && e.y < pickerTop + PICKER_ROWS - 1) {
+        if (e.y === pickerTop + PICKER_COLORS.length) {
+          // the reset row
+          const x = Math.floor(e.fine?.x ?? e.x)
+          const hit = layout(rowReset(s)).find(c => c.id !== 'label' && x >= c.from && x < c.to)
+          if (hit) act(hit.id)
+          return
+        }
         const col = Math.floor((e.fine?.x ?? e.x) / PICKER_CELL)
         const hex = col >= 0 && col < PICKER_COLS ? PICKER_COLORS[e.y - pickerTop]?.[col] : undefined
         if (hex && s.color !== 0) surface.post({ setColor: { index: s.color, hex }, w: s.w, ph: s.ph })
@@ -444,6 +477,7 @@ export default function Paint(props: Props, surface: any) {
 
     surface.onKey((e: { key: string; ctrl?: true; meta?: true; shift?: true }) => {
       s.note = ''
+      if (!e.ctrl && !e.meta && e.key === 'R') { act('reset-all'); return } // Shift+R: every color back to its default
       const k = e.key.toLowerCase()
       if (e.ctrl || e.meta) {
         // Ctrl+Z undoes, Ctrl+Y (or Ctrl+Shift+Z where the terminal says Shift) redoes; Cmd likewise. Nothing else with a modifier.
@@ -465,6 +499,7 @@ export default function Paint(props: Props, surface: any) {
       else if (k === 'a') act('ascii')
       else if (k === '?' || k === 'h') act('help')
       else if (k === 'k') act('picker')
+      else if (k === 'r') act('reset-one')
       else if (k === '[') act('smaller')
       else if (k === ']') act('bigger')
     })
@@ -503,6 +538,7 @@ function view(s: Store, surface: any) {
     : c.kind === 'danger' ? { backgroundColor: UI.danger, color: UI.dangerText }
     : c.kind === 'lang' ? { backgroundColor: UI.lang, color: UI.langText }
     : c.kind === 'label' ? { dimColor: true }
+    : c.kind === 'off' ? { backgroundColor: UI.off, color: UI.offText }
     : { backgroundColor: UI.chip, color: UI.chipText }
   const chipRow = (groups: Chip[][]) =>
     Text({
@@ -566,6 +602,7 @@ function view(s: Store, surface: any) {
     ...PICKER_COLORS.map((row: string[]) =>
       Text({ children: row.map((hex: string) => Text({ backgroundColor: hex, color: textOn(hex), bold: true, children: [hex === current && s.color !== 0 ? ' ●  ' : '    '] })) }),
     ),
+    chipRow(rowReset(s)),
   ]
 
   const helpRows = !s.help ? [] : [
