@@ -8,6 +8,12 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 - Save as SVG, or copy the drawing as a JS/TS array or as ASCII art
 - A help block with all the shortcuts sits under the canvas (fold it with `?`)
 
+<p align="center">
+  <img src="docs/preview.png" alt="The paint pane: a menu of colors and tools, a small pixel-art house scene on the canvas, and the help block below" width="560">
+</p>
+
+<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the sample picture drawn through its mouse handlers. Fonts and colors will differ in your terminal.</sub></p>
+
 > **Status: early (0.9).** It was built against Claude Code's mod API and tested with a simulated engine and the API's type definitions. How mouse drags, `Shift` and `Ctrl+Z` reach it depends on your terminal (see [Terminals](#terminals)). Issues and reports of what works where are welcome.
 
 ## Install
