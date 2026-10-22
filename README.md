@@ -5,15 +5,16 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 - Drag to draw (left button), drag with the right button to erase
 - Palette of 9 colors plus an eraser, brush sizes 1-4, flood fill, straight lines
 - **Mirror mode**: draw one half and the other half follows (left-right, up-down, or both)
+- **Custom colors**: change any of the nine palette colors to any `#rrggbb` (a field under the canvas, or `/paint color 3 #ff8800`)
 - Undo / redo (20 steps), resizable canvas, English and Korean
 - Save as SVG, or copy the drawing as a JS/TS array or as ASCII art
 - A help block with all the shortcuts sits under the canvas (fold it with `?`); the status line shows the tool, brush, color, undo depth and mirror mode
 
 <p align="center">
-  <img src="docs/preview.png" alt="The paint pane in left-right mirror mode: a symmetric pixel-art butterfly drawn on the left half only, with the Mirror menu row, the status line and the help block" width="560">
+  <img src="docs/preview.png" alt="The paint pane in left-right mirror mode with a customized palette: a symmetric pixel-art butterfly drawn on the left half only, the Mirror menu row, the status line, the help block and the Size and Color fields" width="560">
 </p>
 
-<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the butterfly drawn through its mouse handlers on the left half only (mirror mode on). Fonts and colors will differ in your terminal.</sub></p>
+<p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the butterfly drawn through its mouse handlers on the left half only (mirror mode on), using a customized palette. Fonts and colors will differ in your terminal.</sub></p>
 
 > **Status: early (0.9).** It was built against Claude Code's mod API and tested with a simulated engine and the API's type definitions. How mouse drags, `Shift` and `Ctrl+Z` reach it depends on your terminal (see [Terminals](#terminals)). Issues and reports of what works where are welcome.
 
@@ -32,7 +33,7 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 | | |
 |---|---|
 | Draw / erase | drag with the left / right mouse button |
-| Colors | `1`-`9`, `0` is the eraser (or click the swatches) |
+| Colors | `1`-`9`, `0` is the eraser (or click the swatches). Change a color: see [Custom colors](#custom-colors) |
 | Tools | `p` pen, `l` line, `f` fill, `b` brush size (1-4) |
 | Mirror | `m` cycles off → left-right → up-down → both → off, or click the chips on the fourth menu row |
 | Straight line | the `Line` tool (`l`), or hold `Shift` while dragging (snaps to 0 / 45 / 90°) |
@@ -45,6 +46,27 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 | Language | the chip at the end of the third row, or `/paint en` / `/paint ko` (Korean is the default) |
 
 The last JS/ASCII export can be printed in the chat with `/paint export`. If the terminal has no clipboard path, exports are written to `~/Pictures` instead.
+
+### Custom colors
+
+Each of the nine palette colors can be set to any color you like. Pick a swatch (click it, or press its number) and type a color in the **Color** field under the canvas, or use the command:
+
+| Enter | Meaning |
+|---|---|
+| `#ff8800` | the selected swatch becomes this color |
+| `3 #ff8800` or `3=#ff8800` | swatch 3 becomes this color |
+| `#f80`, `ff8800`, `rgb(255,136,0)` | other ways to write a color (the `#` is optional, three-digit hex is expanded) |
+| `reset` / `reset all` | every color back to the defaults |
+| `reset 3` | only swatch 3 back to its default |
+| `/paint color` | lists the nine colors (`/paint color 3 #ff8800` changes one, `/paint palette …` and `/paint colors …` also work) |
+
+Things to know:
+
+- The picture stores *which swatch* each pixel uses, so changing a swatch recolors every pixel already drawn with it (like an indexed palette).
+- The eraser (`0`) has no color and cannot be changed. A bare `#ff8800` with the eraser selected is refused; give a number instead (`3 #ff8800`).
+- The swatch labels switch between black and white text, whichever reads better on the color. The status line shows the selected color's code (`Color 3 #facc15`).
+- The SVG, the JS code (`PALETTE`) and the ASCII brightness all use your colors. In the JS export's comment a changed color is named by its hex code instead of its name (`B #2dd4bf`), and the letters (`R O Y G B P M W K`) stay tied to the swatch numbers.
+- Custom colors last for the session: they are not saved to a file, so a new Claude Code session starts with the defaults.
 
 ### Mirror mode
 
@@ -111,6 +133,11 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
   - 모드는 `좌우`, `상하`, `4방향`이에요. `m` 을 누를 때마다 좌우 → 상하 → 4방향 → 끔 순서로 바뀌어요.
   - 펜, 직선 도구(Shift 직선과 미리보기 포함), 오른쪽 버튼 지우개, 채우기(반대쪽 영역도 함께 채워요), 모든 굵기가 대칭으로 동작해요.
   - 켜 있는 동안 가운데 줄(축)의 빈 픽셀이 조금 밝게 보이고, 상태 줄에 `대칭 좌우` 같은 표시가 나와요. 한 번 되돌리기로 대칭 획 전체가 사라져요. 대칭 설정은 되돌리기 대상이 아니에요.
+- 색 지정: 팔레트 9색을 원하는 색(`#rrggbb`)으로 바꿀 수 있어요. 색을 고른 뒤 캔버스 아래 **색** 입력칸에 입력하거나 `/paint color 3 #ff8800` 명령을 쓰세요.
+  - `#ff8800` 은 고른 색, `3 #ff8800` 은 3번 색을 바꿔요. `#f80`, `ff8800`, `rgb(255,136,0)` 도 돼요.
+  - `reset` 은 모든 색을, `reset 3` 은 3번 색만 기본값으로 되돌려요. `/paint color` 는 현재 색 목록을 보여 줘요.
+  - 그림은 "어떤 번호의 색인지"를 기억해서, 색을 바꾸면 이미 그린 픽셀도 새 색으로 바뀌어요. 지우개(0)는 바꿀 수 없어요.
+  - SVG 저장, JS 코드, ASCII 내보내기에 모두 바꾼 색이 쓰여요. 바꾼 색은 이번 세션 동안만 유지돼요.
 - 캔버스 아래에 도움말(단축키 목록)이 있어요. `?`(또는 `h`) 키나 첫 줄 끝의 `?` 칩으로 접고 펼쳐요.
 - 저장하면 `~/Pictures/paint-날짜.svg` 가 만들어집니다.
 - 크기: `−` `+` 칩, `[` `]` 키, `/paint 100x60`, 또는 캔버스 아래 입력칸에 직접 입력해요. 구분은 `x`, `*`, `×`, 공백 모두 돼요 (`100x60`, `100*60`, `100 60`).

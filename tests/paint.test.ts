@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { MAX, MIN, PALETTE, SIZE, STEP, crop, decode, parseLang, parseSize, stepSize, toAscii, toCode, toSvg } from '../hooks/register'
+import { MAX, MIN, PALETTE, SIZE, STEP, applyColorEdit, crop, decode, parseColor, parseColorEdit, parseLang, parseSize, stepSize, toAscii, toCode, toSvg } from '../hooks/register'
 
 test('저장: 숫자열을 팔레트 번호로 읽고, 틀린 건 거절한다', () => {
   expect(decode('0120', 2, 2)).toEqual([0, 1, 2, 0])
@@ -117,4 +117,54 @@ test('내보내기 코드의 주석은 언어를 따른다', () => {
   expect(toCode(g, 8, 4, 'en')).toContain("// 3x3 · '.' = clear · O orange · B blue · W white")
   expect(toCode(g, 8, 4, 'ko')).toContain("// 3x3 · '.' = 비어 있음 · O 주황 · B 파랑 · W 흰색")
   expect(toCode(g, 8, 4)).toBe(toCode(g, 8, 4, 'ko')) // Korean is the default
+})
+
+test('색 입력: #rgb, #rrggbb(# 없이도), rgb(r,g,b)를 알아본다', () => {
+  expect(parseColor('#FFF')).toBe('#ffffff')
+  expect(parseColor('f80')).toBe('#ff8800')
+  expect(parseColor('ABC123')).toBe('#abc123')
+  expect(parseColor(' #ff8800 ')).toBe('#ff8800')
+  expect(parseColor(' rgb( 1 , 2 , 3 ) ')).toBe('#010203')
+  expect(parseColor('rgb(255,255,255)')).toBe('#ffffff')
+  expect(parseColor('rgb(256,0,0)')).toBeNull()
+  expect(parseColor('#12345')).toBeNull()
+  expect(parseColor('#ggg')).toBeNull()
+  expect(parseColor('red')).toBeNull()
+  expect(parseColor('')).toBeNull()
+})
+
+test('색 편집: 번호가 있으면 그 칸, 없으면 고른 칸, reset은 기본값으로', () => {
+  expect(parseColorEdit('#ff8800', 4)).toEqual({ kind: 'set', index: 4, hex: '#ff8800' })
+  expect(parseColorEdit('3 #ff8800', 4)).toEqual({ kind: 'set', index: 3, hex: '#ff8800' })
+  expect(parseColorEdit('3=f80', 4)).toEqual({ kind: 'set', index: 3, hex: '#ff8800' })
+  expect(parseColorEdit('9:123', 1)).toEqual({ kind: 'set', index: 9, hex: '#112233' }) // slot 9, hex 123
+  expect(parseColorEdit('0 #fff', 1)).toBeNull() // the eraser has no color
+  expect(parseColorEdit('10 #fff', 1)).toBeNull()
+  expect(parseColorEdit('#fff', 0)).toBeNull() // eraser selected, no number given
+  expect(parseColorEdit('3 banana', 1)).toBeNull()
+  expect(parseColorEdit('reset', 1)).toEqual({ kind: 'reset', index: 'all' })
+  expect(parseColorEdit('reset all', 1)).toEqual({ kind: 'reset', index: 'all' })
+  expect(parseColorEdit('reset 7', 1)).toEqual({ kind: 'reset', index: 7 })
+  expect(parseColorEdit('reset 0', 1)).toBeNull()
+})
+
+test('색 편집을 팔레트에 적용해도 원본은 그대로', () => {
+  const changed = applyColorEdit(PALETTE, { kind: 'set', index: 2, hex: '#000000' })
+  expect(changed[2]).toBe('#000000')
+  expect(PALETTE[2]).toBe('#f97316')
+  expect(applyColorEdit(changed, { kind: 'reset', index: 2 })).toEqual([...PALETTE])
+  expect(applyColorEdit(changed, { kind: 'reset', index: 5 })[2]).toBe('#000000') // another slot: untouched
+  expect(applyColorEdit(changed, { kind: 'reset', index: 'all' })).toEqual([...PALETTE])
+})
+
+test('내보내기는 지정한 팔레트를 쓴다', () => {
+  const pal = PALETTE.map((c, i) => (i === 5 ? '#123456' : c))
+  const g = sprite()
+  expect(toCode(g, 8, 4, 'en', pal)).toContain("B: '#123456'")
+  expect(toCode(g, 8, 4, 'en', pal)).toContain('B #123456') // a changed color is named by its hex, not "blue"
+  expect(toCode(g, 8, 4, 'en', pal)).toContain('W white') // an unchanged one keeps its name
+  expect(toCode(g, 8, 4, 'en')).toContain("B: '#38bdf8'") // no palette: the defaults
+  expect(toSvg(g, 8, 4, 10, pal)).toContain('fill="#123456"')
+  expect(toSvg(g, 8, 4, 10)).not.toContain('#123456')
+  expect(toAscii(g, 8, 4, PALETTE.map(() => '#ffffff'))).toContain('██') // brightness comes from the palette given
 })

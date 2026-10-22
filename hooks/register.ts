@@ -3,6 +3,8 @@
 //   draws itself. This hooks module opens the pane, hosts the module, and acts on what the canvas
 //   posts: saves, exports, resize and language requests. Under the canvas sits a size field.
 //   Two languages, Korean (the default) and English: /paint en, /paint ko, or the chip on the canvas.
+//   The palette (colors 1-9) can be changed with the Color field or /paint color; it lives here and
+//   goes down to the canvas in its props, so the canvas, the exports and the SVG always agree.
 import type { Register } from 'claude-code'
 
 const PANE = 'paint'
@@ -16,6 +18,48 @@ const MENU_WIDTH = 66 // columns the menu rows need: the region is never narrowe
 export const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#8b5cf6', '#ec4899', '#ffffff', '#000000']
 
 const even = (n: number) => n - (n % 2)
+
+/** The palette the session started with. Index 0 is the eraser (no color); 1-9 can be changed. */
+let palette: string[] = [...PALETTE]
+let selected = 1 // the swatch the canvas has selected (it tells us when that changes)
+
+/** "#f80", "ff8800", "#FF8800" or "rgb(255, 136, 0)" → "#ff8800"; null when it is no color. */
+export function parseColor(text: string): string | null {
+  const t = text.trim().toLowerCase()
+  const hex = t.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/)
+  if (hex) {
+    const h = hex[1]!
+    return '#' + (h.length === 3 ? [...h].map(c => c + c).join('') : h)
+  }
+  const rgb = t.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/)
+  if (rgb && [rgb[1], rgb[2], rgb[3]].every(n => Number(n) <= 255)) return '#' + [rgb[1], rgb[2], rgb[3]].map(n => Number(n).toString(16).padStart(2, '0')).join('')
+  return null
+}
+
+export type ColorEdit = { kind: 'set'; index: number; hex: string } | { kind: 'reset'; index: number | 'all' }
+
+/**
+ * What a Color field entry or `/paint color …` asks for: "#ff8800" (the selected swatch), "3 #ff8800" or "3=#ff8800"
+ * (swatch 3), "reset" / "reset all" / "reset 3". Null when it is none of those, or names the eraser (0).
+ */
+export function parseColorEdit(text: string, selectedIndex: number): ColorEdit | null {
+  const t = text.trim().toLowerCase()
+  const reset = t.match(/^reset(?:\s+([1-9]|all))?$/)
+  if (reset) return { kind: 'reset', index: reset[1] && reset[1] !== 'all' ? Number(reset[1]) : 'all' }
+  const slot = t.match(/^([1-9])\s*(?:[:=]|\s)\s*(.+)$/)
+  if (slot) {
+    const hex = parseColor(slot[2]!)
+    return hex ? { kind: 'set', index: Number(slot[1]), hex } : null
+  }
+  const hex = parseColor(t)
+  return hex && selectedIndex >= 1 && selectedIndex <= 9 ? { kind: 'set', index: selectedIndex, hex } : null
+}
+
+/** The palette after an edit; the original is left alone. */
+export function applyColorEdit(pal: string[], edit: ColorEdit): string[] {
+  if (edit.kind === 'set') return pal.map((c, i) => (i === edit.index ? edit.hex : c))
+  return pal.map((c, i) => (edit.index === 'all' || edit.index === i ? PALETTE[i]! : c))
+}
 
 // The − and + chips change width and height together, STEP pixels each, so a square canvas stays square.
 // A side that has reached its limit stays there and the other keeps going, until both are at theirs.
@@ -35,8 +79,8 @@ export function stepSize(from: { w: number; ph: number }, dir: 1 | -1, maxW: num
 export const HELP_ROWS = 10
 let helpOpen = true
 
-// The pane's rows: the canvas, its 4 menu rows and status line, the size field, and the help block when open.
-const paneRows = (ph: number) => ph / 2 + 8 + (helpOpen ? HELP_ROWS : 0)
+// The pane's rows: the canvas, its 4 menu rows and status line, the size and color fields, and the help block when open.
+const paneRows = (ph: number) => ph / 2 + 9 + (helpOpen ? HELP_ROWS : 0)
 
 export type Lang = 'ko' | 'en'
 let lang: Lang = 'ko'
@@ -44,7 +88,7 @@ let lang: Lang = 'ko'
 // Everything this module says, per language.
 const MSG = {
   ko: {
-    usage: `Usage: /paint, /paint bigger|smaller, /paint 100x60 (x, *, × 모두 가능 · 픽셀 단위 · 가로 ${MIN.w}-${MAX.w}, 세로 ${MIN.ph}-${MAX.ph}, 세로는 짝수), /paint export (마지막 내보내기), /paint en|ko (언어)`,
+    usage: `Usage: /paint, /paint bigger|smaller, /paint 100x60 (x, *, × 모두 가능 · 픽셀 단위 · 가로 ${MIN.w}-${MAX.w}, 세로 ${MIN.ph}-${MAX.ph}, 세로는 짝수), /paint export (마지막 내보내기), /paint color 3 #ff8800 (색 바꾸기), /paint en|ko (언어)`,
     adjusted: (raw: string, w: number, ph: number) => `${raw.trim()} → ${w}×${ph} 로 맞췄어요 (가로 ${MIN.w}-${MAX.w}, 세로 ${MIN.ph}-${MAX.ph}, 세로는 짝수)`,
     nothingExported: '아직 내보낸 게 없어요: 캔버스에서 "JS 코드 복사"나 "ASCII 복사"를 먼저 누르세요.',
     opened: (w: number, ph: number) => `Paint: ${w}×${ph} 픽셀. 드래그해서 그려요 (키를 쓰려면 캔버스를 먼저 클릭하세요)`,
@@ -59,6 +103,13 @@ const MSG = {
     toFile: (file: string) => `클립보드를 못 써서 파일로 저장했어요: ${file}`,
     failed: (err: string) => `복사도 저장도 못 했어요 (${err}). /paint export 로 채팅에서 가져가세요`,
     saved: (file: string, n: number) => `저장했어요: ${file} (${n})`,
+    colorLabel: '색 ',
+    colorPlaceholder: '예: #ff8800 (고른 색) · 3 #ff8800 · reset',
+    colorUsage: '색 지정: #ff8800 (고른 색), 3 #ff8800 (3번 색), rgb(255,136,0), reset [번호|all] · 번호는 1-9예요 (0은 지우개라 바꿀 수 없어요)',
+    colorEraser: '지우개(0)는 색을 바꿀 수 없어요. 1-9번 색을 고르거나 번호를 함께 적어 주세요 (예: 3 #ff8800)',
+    colorSet: (i: number, hex: string) => `색 ${i} → ${hex}`,
+    colorReset: (what: number | 'all') => (what === 'all' ? '색을 모두 기본값으로 되돌렸어요' : `색 ${what} 을(를) 기본값으로 되돌렸어요`),
+    colorDefault: '기본',
     sizeLabel: '크기 ',
     sizePlaceholder: `예: 100x60 또는 100*60 (가로 ${MIN.w}-${MAX.w} × 세로 ${MIN.ph}-${MAX.ph})`,
     apply: '적용',
@@ -68,7 +119,7 @@ const MSG = {
     clear: '비어 있음',
   },
   en: {
-    usage: `Usage: /paint, /paint bigger|smaller, /paint 100x60 (x, * or × · pixels · width ${MIN.w}-${MAX.w}, height ${MIN.ph}-${MAX.ph}, height even), /paint export (the last export), /paint en|ko (language)`,
+    usage: `Usage: /paint, /paint bigger|smaller, /paint 100x60 (x, * or × · pixels · width ${MIN.w}-${MAX.w}, height ${MIN.ph}-${MAX.ph}, height even), /paint export (the last export), /paint color 3 #ff8800 (change a color), /paint en|ko (language)`,
     adjusted: (raw: string, w: number, ph: number) => `${raw.trim()} → adjusted to ${w}×${ph} (width ${MIN.w}-${MAX.w}, height ${MIN.ph}-${MAX.ph}, height even)`,
     nothingExported: 'Nothing exported yet: press "Copy JS" or "Copy ASCII" on the canvas first.',
     opened: (w: number, ph: number) => `Paint: ${w}×${ph} px. Drag to draw (click the canvas first for the keys)`,
@@ -83,6 +134,13 @@ const MSG = {
     toFile: (file: string) => `No clipboard here, so it was saved to a file: ${file}`,
     failed: (err: string) => `Could neither copy nor save (${err}). Use /paint export to take it from the chat`,
     saved: (file: string, n: number) => `Saved: ${file} (${n})`,
+    colorLabel: 'Color ',
+    colorPlaceholder: 'e.g. #ff8800 (the selected one) · 3 #ff8800 · reset',
+    colorUsage: 'Colors: #ff8800 (the selected one), 3 #ff8800 (color 3), rgb(255,136,0), reset [number|all] · numbers are 1-9 (0 is the eraser and cannot change)',
+    colorEraser: 'The eraser (0) has no color to change. Pick color 1-9 or give its number too (e.g. 3 #ff8800)',
+    colorSet: (i: number, hex: string) => `Color ${i} → ${hex}`,
+    colorReset: (what: number | 'all') => (what === 'all' ? 'All colors are back to the defaults' : `Color ${what} is back to its default`),
+    colorDefault: 'default',
     sizeLabel: 'Size ',
     sizePlaceholder: `e.g. 100x60 or 100*60 (width ${MIN.w}-${MAX.w} × height ${MIN.ph}-${MAX.ph})`,
     apply: 'apply',
@@ -93,7 +151,7 @@ const MSG = {
   },
 } as const
 
-const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, ...(note ? { note } : {}) })
+const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, palette, ...(note ? { note } : {}) })
 
 /** "en", "english", "영문" … → 'en'; "ko", "korean", "한국어" … → 'ko'; null for anything else. */
 export function parseLang(word: string): Lang | null {
@@ -121,19 +179,19 @@ export function crop(grid: number[], w: number, ph: number): number[][] | null {
 }
 
 /** The drawing as a JS/TS array of strings ('.' clear, a letter per color) with the colors it uses; null when empty. */
-export function toCode(grid: number[], w: number, ph: number, language: Lang = 'ko'): string | null {
+export function toCode(grid: number[], w: number, ph: number, language: Lang = 'ko', pal: readonly string[] = PALETTE): string | null {
   const rows = crop(grid, w, ph)
   if (!rows) return null
   const used = [...new Set(rows.flat())].filter(c => c).sort((a, b) => a - b)
   const lines = rows.map(row => `  "${row.map(c => LETTERS[c]).join('')}",`)
   return [
-    `// ${rows[0]!.length}x${rows.length} · '.' = ${MSG[language].clear} · ${used.map(c => `${LETTERS[c]} ${MSG[language].colors[c]}`).join(' · ')}`,
+    `// ${rows[0]!.length}x${rows.length} · '.' = ${MSG[language].clear} · ${used.map(c => `${LETTERS[c]} ${pal[c] === PALETTE[c] ? MSG[language].colors[c] : pal[c]}`).join(' · ')}`,
     'const SPRITE = [',
     ...lines,
     ']',
     '',
     'const PALETTE = {',
-    ...used.map(c => `  ${LETTERS[c]}: '${PALETTE[c]}',`),
+    ...used.map(c => `  ${LETTERS[c]}: '${pal[c]}',`),
     '}',
     '',
   ].join('\n')
@@ -146,12 +204,12 @@ function brightness(hex: string): number {
 }
 
 /** The drawing as block characters, two to a pixel so it keeps its shape; brighter colors are denser. Null when empty. */
-export function toAscii(grid: number[], w: number, ph: number): string | null {
+export function toAscii(grid: number[], w: number, ph: number, pal: readonly string[] = PALETTE): string | null {
   const rows = crop(grid, w, ph)
   if (!rows) return null
   const shade = (c: number) => {
     if (!c) return '  '
-    const b = brightness(PALETTE[c]!)
+    const b = brightness(pal[c]!)
     const ch = b > 0.85 ? '█' : b > 0.6 ? '▓' : b > 0.3 ? '▒' : '░'
     return ch + ch
   }
@@ -179,7 +237,7 @@ export function decode(text: unknown, w: number, ph: number): number[] | null {
 }
 
 /** The picture as an SVG, `size` pixels per canvas pixel; same-color runs in a row are one rect. */
-export function toSvg(grid: number[], w: number, ph: number, size = 6): string {
+export function toSvg(grid: number[], w: number, ph: number, size = 6, pal: readonly string[] = PALETTE): string {
   const rects: string[] = []
   for (let y = 0; y < ph; y++) {
     let x = 0
@@ -187,11 +245,24 @@ export function toSvg(grid: number[], w: number, ph: number, size = 6): string {
       const c = grid[y * w + x] ?? 0
       let end = x + 1
       while (end < w && (grid[y * w + end] ?? 0) === c) end++
-      if (c) rects.push(`<rect x="${x * size}" y="${y * size}" width="${(end - x) * size}" height="${size}" fill="${PALETTE[c]}"/>`)
+      if (c) rects.push(`<rect x="${x * size}" y="${y * size}" width="${(end - x) * size}" height="${size}" fill="${pal[c]}"/>`)
       x = end
     }
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * size}" height="${ph * size}" viewBox="0 0 ${w * size} ${ph * size}">\n<rect width="100%" height="100%" fill="#ffffff"/>\n${rects.join('\n')}\n</svg>\n`
+}
+
+/** Applies a Color field entry / command; says what happened, and whether the palette changed. */
+function editColors(text: string): { changed: boolean; message: string } {
+  const edit = parseColorEdit(text, selected)
+  if (!edit) return { changed: false, message: parseColor(text) && selected === 0 ? MSG[lang].colorEraser : MSG[lang].colorUsage }
+  palette = applyColorEdit(palette, edit)
+  return { changed: true, message: edit.kind === 'set' ? MSG[lang].colorSet(edit.index, edit.hex) : MSG[lang].colorReset(edit.index) }
+}
+
+/** The palette as lines: "3  #facc15" and "(default)" where it is unchanged. */
+function listColors(): string {
+  return palette.slice(1).map((hex, i) => `${i + 1}  ${hex}${hex === PALETTE[i + 1] ? `  (${MSG[lang].colorDefault})` : ''}`).join('\n')
 }
 
 let size = { ...SIZE }
@@ -218,6 +289,15 @@ export const register: Register = on => {
     const asked = parseLang(word.replace(/^lang(uage)?\s*/, ''))
     if (asked) lang = asked
     else if (word === 'export') return { text: lastExport || MSG[lang].nothingExported }
+    else if (/^(colou?rs?|palette)(\s|$)/.test(word)) {
+      const rest = word.replace(/^(colou?rs?|palette)\s*/, '')
+      if (rest === '') return { text: listColors() }
+      const done = editColors(rest)
+      if (!done.changed) return { text: done.message }
+      await $.ui.open({ id: PANE, title: '🎨 Paint', focus: true, closeOnEscape: true, rows: paneRows(size.ph) })
+      $.ui.invalidate('ui.render') // the canvas gets the new palette in its props
+      return { text: `${done.message}\n${listColors()}` }
+    }
     else if (word === 'bigger' || word === 'smaller') size = stepSize(size, word === 'bigger' ? 1 : -1, paneColumns)
     else if (e.args.trim() !== '') {
       const next = parseSize(e.args)
@@ -254,16 +334,33 @@ export const register: Register = on => {
             $.ui.toast(`Paint: ${next.adjusted ? MSG[lang].adjusted(value, next.w, next.ph) : MSG[lang].sized(next.w, next.ph)}`)
           },
         }),
+        Input({
+          key: 'color',
+          label: MSG[lang].colorLabel,
+          placeholder: MSG[lang].colorPlaceholder,
+          value: '',
+          submitLabel: MSG[lang].apply,
+          onSubmit: async value => {
+            const done = editColors(value)
+            if (done.changed) $.ui.invalidate('ui.render') // the canvas gets the new palette in its props
+            $.ui.toast(`Paint: ${done.message}`)
+          },
+        }),
       ],
     })
   })
 
   on('ui.message', async ($, e) => {
-    const data = e.data as { save?: unknown; export?: unknown; grid?: unknown; resize?: unknown; lang?: unknown; help?: unknown; w?: unknown; ph?: unknown } | null
+    const data = e.data as { save?: unknown; export?: unknown; grid?: unknown; resize?: unknown; lang?: unknown; help?: unknown; select?: unknown; w?: unknown; ph?: unknown } | null
     if (e.element !== 'canvas' || !data || typeof data !== 'object') return {}
     // posted by code on the surface: check it is the canvas we drew before acting on it
     if (data.w !== size.w || data.ph !== size.ph) return {}
     const t = MSG[lang]
+
+    if (typeof data.select === 'number' && Number.isInteger(data.select) && data.select >= 0 && data.select <= 9) {
+      selected = data.select // which swatch a bare color entry changes
+      return {}
+    }
 
     if (typeof data.help === 'boolean') {
       helpOpen = data.help
@@ -291,7 +388,7 @@ export const register: Register = on => {
     if (data.export === 'js' || data.export === 'ascii') {
       const grid = decode(data.grid, size.w, size.ph)
       if (!grid) return {}
-      const text = data.export === 'js' ? toCode(grid, size.w, size.ph, lang) : toAscii(grid, size.w, size.ph)
+      const text = data.export === 'js' ? toCode(grid, size.w, size.ph, lang, palette) : toAscii(grid, size.w, size.ph, palette)
       if (!text) return { props: props(t.empty) }
       lastExport = text
       const what = data.export === 'js' ? t.code : t.ascii
@@ -319,7 +416,7 @@ export const register: Register = on => {
     const stamp = new Date(await $.clock.now()).toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const file = `${home}/Pictures/paint-${stamp}.svg`
     try {
-      await $.fs.write(file, toSvg(grid, size.w, size.ph))
+      await $.fs.write(file, toSvg(grid, size.w, size.ph, 6, palette))
       $.ui.toast(`Paint: saved ${file}`)
       saves += 1
       return { props: props(t.saved(file, saves)) }

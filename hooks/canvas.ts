@@ -8,7 +8,7 @@
 import type { ClientPointerEvent } from 'claude-code'
 
 type Lang = 'ko' | 'en'
-type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean }
+type Props = { w?: number; ph?: number; note?: string; lang?: Lang; help?: boolean; palette?: unknown }
 type Tool = 'pen' | 'line' | 'fill'
 type Mirror = 'off' | 'lr' | 'ud' | 'both' // lr: left-right, ud: up-down
 type Store = {
@@ -29,9 +29,29 @@ type Store = {
   lang: Lang
   help: boolean // the help block under the canvas is shown
   mirror: Mirror // strokes, lines and fills are repeated across the middle
+  palette: string[] // the ten colors, from the hooks module's props; index 0 is the eraser
 }
 
 const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#8b5cf6', '#ec4899', '#ffffff', '#000000']
+/** The palette from props when it is ten colors (index 0 empty, 1-9 as #rrggbb); the default one otherwise. */
+function validPalette(p: unknown): string[] {
+  if (!Array.isArray(p) || p.length !== 10) return [...PALETTE]
+  return p.every((c, i) => (i === 0 ? c === '' : typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c))) ? [...(p as string[])] : [...PALETTE]
+}
+
+/** WCAG relative luminance of a #rrggbb color, 0 (black) .. 1 (white). */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16)
+  const lin = (v: number) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)
+}
+
+/** Black or white text, whichever has the better contrast on this color (the defaults keep black, but on black itself). */
+function textOn(hex: string): string {
+  const l = luminance(hex)
+  return (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? '#000000' : '#ffffff'
+}
+
 const EMPTY = '#202020'
 const EMPTY_AXIS = '#2e3d49' // empty pixels on a mirror axis, so the line of symmetry shows
 // Menu colors: tools light up green when chosen, file actions are blue, Clear is red, the language chip purple.
@@ -73,7 +93,7 @@ const TEXT = {
       ['도구', 'p 펜 · l 직선 · f 채우기 · b 굵기 바꾸기 (1-4)'],
       ['대칭', 'm 키로 좌우 · 상하 · 4방향 · 끔 (반대쪽에도 찍혀요)'],
       ['직선', 'l 직선 도구, 또는 Shift 누르고 드래그 (가로·세로·45°)'],
-      ['색', '1-9 색 고르기 · 0 지우개'],
+      ['색', '1-9 색 고르기 · 0 지우개 · 색 바꾸기는 아래 입력칸'],
       ['되돌리기', 'z 또는 Ctrl+Z 되돌리기 · y, Ctrl+Y, Shift+Z 다시'],
       ['크기', `[ ] 또는 − + 칩, 아래 입력칸 (가로 ${LIMITS.minW}-${LIMITS.maxW}, 세로 ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['내보내기', 'e SVG 저장 · j JS 코드 복사 · a ASCII 복사 · c 지우기'],
@@ -82,7 +102,7 @@ const TEXT = {
     tools: { pen: '펜', line: '직선', fill: '채우기' },
     mirrorLabel: '대칭', mirrorChips: { off: ' 끔 ', lr: ' ↔ 좌우 ', ud: ' ↕ 상하 ', both: ' ✛ 4방향 ' },
     mirrorName: { off: '끔', lr: '좌우', ud: '상하', both: '4방향' },
-    status: (tool: string, brush: number, color: number, undo: number, redo: number, mirror: string) => `${tool} · 굵기 ${brush} · 색 ${color} · 되돌리기 ${undo} · 다시 ${redo}${mirror ? ` · 대칭 ${mirror}` : ''}`,
+    status: (tool: string, brush: number, color: string, undo: number, redo: number, mirror: string) => `${tool} · 굵기 ${brush} · 색 ${color}${mirror ? ` · 대칭 ${mirror}` : ''} · ↶ ${undo} · ↷ ${redo}`,
   },
   en: {
     pen: ' ✎ Pen ', line: ' ╱ Line ', fill: ' ▨ Fill ', brush: (n: number) => ` ● Brush ${n} `, undo: ' ↶ Undo ', redo: ' ↷ Redo ', clear: ' ✕ Clear ', save: ' ⤓ Save ',
@@ -94,7 +114,7 @@ const TEXT = {
       ['Tools', 'p pen · l line · f fill · b brush size (1-4)'],
       ['Mirror', 'm cycles left-right / up-down / both / off'],
       ['Line', 'l line tool, or hold Shift while dragging (0/45/90°)'],
-      ['Colors', '1-9 pick a color · 0 eraser'],
+      ['Colors', '1-9 pick · 0 eraser · change them in the Color field'],
       ['Undo', 'z or Ctrl+Z undo · y, Ctrl+Y or Shift+Z redo'],
       ['Size', `[ ] or − +, or the field below (w ${LIMITS.minW}-${LIMITS.maxW} · h ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['Output', 'e save SVG · j copy JS code · a copy ASCII · c clear'],
@@ -103,7 +123,7 @@ const TEXT = {
     tools: { pen: 'Pen', line: 'Line', fill: 'Fill' },
     mirrorLabel: 'Mirror', mirrorChips: { off: ' Off ', lr: ' ↔ Left-right ', ud: ' ↕ Up-down ', both: ' ✛ Both ' },
     mirrorName: { off: 'off', lr: 'left-right', ud: 'up-down', both: 'both' },
-    status: (tool: string, brush: number, color: number, undo: number, redo: number, mirror: string) => `${tool} · Brush ${brush} · Color ${color} · Undo ${undo} · Redo ${redo}${mirror ? ` · Mirror ${mirror}` : ''}`,
+    status: (tool: string, brush: number, color: string, undo: number, redo: number, mirror: string) => `${tool} · Brush ${brush} · Color ${color}${mirror ? ` · Mirror ${mirror}` : ''} · ↶ ${undo} · ↷ ${redo}`,
   },
 } as const
 
@@ -269,11 +289,17 @@ export default function Paint(props: Props, surface: any) {
   const ph = even(clamp(Math.round(props?.ph ?? 32), LIMITS.minPh, LIMITS.maxPh))
 
   if (surface.state === undefined) {
-    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, mirror: 'off' }
+    const s: Store = { w, ph, grid: [], color: 1, tool: 'pen', brush: 1, undo: [], redo: [], last: null, start: null, base: null, erasing: false, note: '', noteFrom: '', lang: props?.lang === 'en' ? 'en' : 'ko', help: props?.help !== false, mirror: 'off', palette: validPalette(props?.palette) }
     reset(s, w, ph)
     let tick = 0
     // the state is a handle on the store the listeners below mutate; a new object asks for a redraw
     const redraw = () => surface.setState({ store: s, tick: ++tick })
+    // Choosing a color tells the hooks module, so a bare entry in its Color field changes the swatch you picked
+    const choose = (i: number) => {
+      if (i === s.color) return
+      s.color = i
+      surface.post({ select: i, w: s.w, ph: s.ph })
+    }
     const pixel = (e: ClientPointerEvent) => {
       const fx = e.fine?.x ?? e.x + 0.5
       const fy = e.fine?.y ?? e.y + 0.25 // no sub-cell position: the top pixel of the cell
@@ -330,7 +356,7 @@ export default function Paint(props: Props, surface: any) {
         if (e.y === 0) {
           const i = Math.floor(x / PALETTE_CHIP)
           const size = sizeSpans(s)
-          if (x >= 0 && x < SWATCHES_END) { s.color = i; redraw() }
+          if (x >= 0 && x < SWATCHES_END) { choose(i); redraw() }
           else if (x >= size.smaller.from && x < size.smaller.to) act('smaller')
           else if (x >= size.bigger.from && x < size.bigger.to) act('bigger')
           else if (x >= size.help.from && x < size.help.to) act('help')
@@ -389,7 +415,7 @@ export default function Paint(props: Props, surface: any) {
         else if (k === 'y') act('redo')
         return
       }
-      if (/^[0-9]$/.test(k)) { s.color = Number(k); redraw() }
+      if (/^[0-9]$/.test(k)) { choose(Number(k)); redraw() }
       else if (k === 'p') act('pen')
       else if (k === 'l') act('line')
       else if (k === 'f') act('fill')
@@ -411,6 +437,7 @@ export default function Paint(props: Props, surface: any) {
   const s: Store = (surface.state as { store: Store }).store
   s.lang = props?.lang === 'en' ? 'en' : 'ko'
   s.help = props?.help !== false
+  s.palette = validPalette(props?.palette)
   if (s.w !== w || s.ph !== ph) reset(s, w, ph)
   if (props?.note && props.note !== s.noteFrom) {
     s.noteFrom = props.note
@@ -448,10 +475,10 @@ function view(s: Store, surface: any) {
     })
 
   // Row 0: the ten swatches (the chosen one carries a dot), then the size group.
-  const swatches = PALETTE.map((hex: string, i: number) =>
+  const swatches = s.palette.map((hex: string, i: number) =>
     Text({
       backgroundColor: i === 0 ? UI.chip : hex,
-      color: i === 0 ? UI.chipText : i === 9 ? '#ffffff' : '#000000',
+      color: i === 0 ? UI.chipText : textOn(hex),
       bold: s.color === i,
       children: [s.color === i ? ` ${i}● ` : ` ${i}  `],
     }),
@@ -478,8 +505,8 @@ function view(s: Store, surface: any) {
     for (let x = 0; x < s.w; x++) {
       const top = s.grid[r * s.w + x] ?? 0
       const bottom = s.grid[(r + 1) * s.w + x] ?? 0
-      const topColor = top ? PALETTE[top]! : guide(s, x, r)
-      const bottomColor = bottom ? PALETTE[bottom]! : guide(s, x, r + 1)
+      const topColor = top ? s.palette[top]! : guide(s, x, r)
+      const bottomColor = bottom ? s.palette[bottom]! : guide(s, x, r + 1)
       // two pixels in one character: the top one is the color of a half block, the bottom one its background
       const cell = topColor === bottomColor ? { text: ' ', bg: topColor } : { text: '▀', color: topColor, bg: bottomColor }
       const last = runs[runs.length - 1]
@@ -490,7 +517,7 @@ function view(s: Store, surface: any) {
   }
 
   const t = TEXT[s.lang]
-  const status = s.note || (s.help ? t.status(t.tools[s.tool], s.brush, s.color, s.undo.length, s.redo.length, s.mirror === 'off' ? '' : t.mirrorName[s.mirror]) : t.hint)
+  const status = s.note || (s.help ? t.status(t.tools[s.tool], s.brush, s.color === 0 ? '0' : `${s.color} ${s.palette[s.color]}`, s.undo.length, s.redo.length, s.mirror === 'off' ? '' : t.mirrorName[s.mirror]) : t.hint)
 
   // The help block: a heading rule, then a label column and its text, one line each.
   const LABEL = 11
