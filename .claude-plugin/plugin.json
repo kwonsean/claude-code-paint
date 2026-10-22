@@ -1,0 +1,20 @@
+{
+  "name": "paint",
+  "version": "0.9.0",
+  "description": "A paint canvas in a Claude Code pane: drag to draw, palette, brush, fill, straight lines, undo/redo, resizable canvas, SVG save, copy as JS code or ASCII art. Korean and English.",
+  "author": {
+    "name": "Sihyeon Kwon",
+    "url": "https://github.com/kwonsean"
+  },
+  "homepage": "https://github.com/kwonsean/claude-code-paint",
+  "repository": "https://github.com/kwonsean/claude-code-paint",
+  "license": "MIT",
+  "keywords": [
+    "paint",
+    "pixel-art",
+    "drawing",
+    "canvas",
+    "pane",
+    "mod"
+  ]
+}
