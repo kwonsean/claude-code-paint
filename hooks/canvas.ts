@@ -112,7 +112,7 @@ const TEXT = {
       ['대칭', 'm 키로 좌우 · 상하 · 4방향 · 끔 (반대쪽에도 찍혀요)'],
       ['직선', 'l 직선 도구, 또는 Shift 누르고 드래그 (가로·세로·45°)'],
       ['색', '1-9 색 · 0 지우개 · k 팔레트 · r 초기화 · R 전부 초기화'],
-      ['되돌리기', 'z 되돌리기 · y 다시 · Ctrl+Z 는 Claude Code 를 멈춰요!'],
+      ['되돌리기', 'z 되돌리기 · x 다시 · Ctrl+Z 는 Claude Code 를 멈춰요!'],
       ['크기', `[ ] 또는 − + 칩, 아래 입력칸 (가로 ${LIMITS.minW}-${LIMITS.maxW}, 세로 ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['내보내기', 'e SVG 저장 · j JS 코드 복사 · a ASCII 복사 · c 지우기'],
       ['참고', '키는 캔버스를 한 번 클릭해야 먹어요 · ? 로 접기'],
@@ -140,7 +140,7 @@ const TEXT = {
       ['Mirror', 'm cycles left-right / up-down / both / off'],
       ['Line', 'l line tool, or hold Shift while dragging (0/45/90°)'],
       ['Colors', '1-9 pick · 0 eraser · k picker · r reset · R reset all'],
-      ['Undo', 'z undo · y redo · Ctrl+Z suspends Claude Code!'],
+      ['Undo', 'z undo · x redo · Ctrl+Z suspends Claude Code!'],
       ['Size', `[ ] or − +, or the field below (w ${LIMITS.minW}-${LIMITS.maxW} · h ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['Output', 'e save SVG · j copy JS code · a copy ASCII · c clear'],
       ['Note', 'Click the canvas once so keys work · ? folds help'],
@@ -511,8 +511,8 @@ export default function Paint(props: Props, surface: any) {
       else if (k === 'f') act('fill')
       else if (k === 'm') act('mirror')
       else if (k === 'b') act('brush')
-      else if (k === 'z') act(e.shift ? 'redo' : 'undo') // z undoes, Shift+Z or y redoes
-      else if (k === 'y') act('redo')
+      else if (k === 'z') act(e.shift ? 'redo' : 'undo') // z undoes, x (or Shift+Z) redoes
+      else if (k === 'x') act('redo')
       else if (k === 'c') act('clear')
       else if (k === 'e') act('save')
       else if (k === 'j') act('js')
