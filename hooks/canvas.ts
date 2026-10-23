@@ -48,7 +48,7 @@ const HUES: [string, string, string][] = [
   ['#c4b5fd', '#8b5cf6', '#5b21b6'], ['#d8b4fe', '#a855f7', '#6b21a8'], ['#f9a8d4', '#ec4899', '#9d174d'], ['#fda4af', '#f43f5e', '#9f1239'],
 ]
 const GRAYS = Array.from({ length: PICKER_COLS }, (_, i) => '#' + Math.round(255 * (1 - i / (PICKER_COLS - 1))).toString(16).padStart(2, '0').repeat(3))
-const PICKER_COLORS: string[][] = [HUES.map(h => h[0]), HUES.map(h => h[1]), HUES.map(h => h[2]), GRAYS]
+const PICKER_COLORS: string[][] = [HUES.map(hue => hue[0]), HUES.map(hue => hue[1]), HUES.map(hue => hue[2]), GRAYS]
 
 /** The palette from props when it is ten colors (index 0 empty, 1-9 as #rrggbb); the default one otherwise. */
 function validPalette(p: unknown): string[] {

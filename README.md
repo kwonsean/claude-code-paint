@@ -48,7 +48,7 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 
 > ⚠️ **Do not press `Ctrl+Z` in the pane.** On macOS and Linux Claude Code uses it to suspend itself (`Claude Code has been suspended. Run fg to bring Claude Code back`). The key never reaches the canvas and your session stops until you type `fg` in the shell. Use `z` for undo and `x` for redo, or the chips. The canvas also accepts `Ctrl+_` (Claude Code's own undo key for its input box) and `Ctrl+Y` where the terminal passes them on.
 
-The last JS/ASCII export can be printed in the chat with `/paint export`. If the terminal has no clipboard path, exports are written to `~/Pictures` instead.
+The last JS/ASCII export can be printed in the chat with `/paint export`. If the terminal has no clipboard path, the export is written to `~/Pictures/paint-<time>.txt` instead.
 
 ### Custom colors
 
@@ -112,7 +112,16 @@ The canvas is drawn in pixels, two to a character with a half block (`▀`: the 
 
 ## What it touches
 
-From the mod API's own report of what the code calls: it reads the `HOME` environment variable, writes files **only** when you save or when an export cannot use the clipboard (into `~/Pictures`), and uses the clipboard when you ask it to copy. It makes **no network requests** and runs **no other programs**.
+From the mod API's own report of what the code calls: it reads the `HOME` environment variable, writes files **only** in the two cases below, and uses the clipboard when you ask it to copy. It makes **no network requests** and runs **no other programs**.
+
+**Every file it can write** (always inside `~/Pictures`, with the time to the second in the name):
+
+| File | When |
+|---|---|
+| `~/Pictures/paint-<time>.svg` | You press Save (`e`). The content is a plain SVG of the drawing: rectangles with fill colors, no script |
+| `~/Pictures/paint-<time>.txt` | Only when a JS or ASCII export cannot use the clipboard. It is always a `.txt` (the JS code is stored as text, never as a `.js` file) |
+
+It does not edit or create build, start-up, settings or instruction files, and it never reads or changes any other file. Two saves in the same second would share a name; otherwise a new save never replaces an earlier one.
 
 ## Terminals
 
@@ -178,4 +187,4 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 - 언어: 세 번째 줄 끝의 칩이나 `/paint en` `/paint ko` 로 영어와 한국어를 바꿔요.
 - 한 글자에 세로 픽셀 둘을 넣는 반블록으로 그려서, 터미널이 마우스 위치를 픽셀 단위로 알려 주면(kitty, Ghostty, iTerm2, WezTerm) 더 정확하게 그려집니다.
 
-내보내기: `JS 코드 복사`(`j`) 는 그린 부분만 잘라 `const SPRITE = ["..R..", ...]` 배열과 `PALETTE` 로, `ASCII 복사`(`a`) 는 밝기에 따라 `█▓▒░` 블록 글자로 클립보드에 넣어요. `/paint export` 는 마지막으로 내보낸 내용을 채팅에 띄웁니다. 클립보드를 못 쓰면 `~/Pictures` 에 파일로 저장해요.
+내보내기: `JS 코드 복사`(`j`) 는 그린 부분만 잘라 `const SPRITE = ["..R..", ...]` 배열과 `PALETTE` 로, `ASCII 복사`(`a`) 는 밝기에 따라 `█▓▒░` 블록 글자로 클립보드에 넣어요. `/paint export` 는 마지막으로 내보낸 내용을 채팅에 띄웁니다. 클립보드를 못 쓰면 `~/Pictures/paint-날짜.txt` 로 저장해요(JS 코드도 항상 `.txt` 예요).

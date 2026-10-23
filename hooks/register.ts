@@ -28,8 +28,8 @@ export function parseColor(text: string): string | null {
   const t = text.trim().toLowerCase()
   const hex = t.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/)
   if (hex) {
-    const h = hex[1]!
-    return '#' + (h.length === 3 ? [...h].map(c => c + c).join('') : h)
+    const digits = hex[1]!
+    return '#' + (digits.length === 3 ? [...digits].map(c => c + c).join('') : digits)
   }
   const rgb = t.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/)
   if (rgb && [rgb[1], rgb[2], rgb[3]].every(n => Number(n) <= 255)) return '#' + [rgb[1], rgb[2], rgb[3]].map(n => Number(n).toString(16).padStart(2, '0')).join('')
@@ -160,7 +160,7 @@ const MSG = {
 
 let debugOn = false // /paint debug: the canvas shows the last key and pointer event it received
 
-const props = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, picker: pickerOpen, palette, ...(debugOn ? { debug: true } : {}), ...(note ? { note } : {}) })
+const canvasProps = (note?: string) => ({ w: size.w, ph: size.ph, lang, help: helpOpen, picker: pickerOpen, palette, ...(debugOn ? { debug: true } : {}), ...(note ? { note } : {}) })
 
 /** "en", "english", "영문" … → 'en'; "ko", "korean", "한국어" … → 'ko'; null for anything else. */
 export function parseLang(word: string): Lang | null {
@@ -332,10 +332,14 @@ export const register: Register = on => {
     const columns = e.props?.bodyColumns
     if (typeof columns === 'number' && columns > 0) paneColumns = columns
     const { Box, Client, Input } = $.ui.resolve(e)
+    const regionWidth = Math.max(size.w, MENU_WIDTH)
+    const regionHeight = size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) + (pickerOpen ? PICKER_ROWS : 0)
+    // The surface module is named by a fixed string, so what this mod loads can be read from the source
+    const canvas = Client({ key: 'canvas', module: './canvas.ts', props: canvasProps(), width: regionWidth, height: regionHeight })
     return Box({
       flexDirection: 'column',
       children: [
-        Client({ key: 'canvas', module: './canvas.ts', props: props(), width: Math.max(size.w, MENU_WIDTH), height: size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) + (pickerOpen ? PICKER_ROWS : 0) }),
+        canvas,
         Input({
           key: 'size',
           label: MSG[lang].sizeLabel,
@@ -380,7 +384,7 @@ export const register: Register = on => {
     if (typeof data.picker === 'boolean') {
       pickerOpen = data.picker
       await applySize($, size) // the pane and the region change height
-      return { props: props() }
+      return { props: canvasProps() }
     }
 
     if (data.setColor && typeof data.setColor === 'object') {
@@ -391,26 +395,26 @@ export const register: Register = on => {
       if (!color || !/^#[0-9a-f]{6}$/i.test(hex)) return {}
       palette = applyColorEdit(palette, { kind: 'set', index, hex: color })
       selected = index
-      return { props: props(t.colorSet(index, color)) }
+      return { props: canvasProps(t.colorSet(index, color)) }
     }
 
     if (data.resetColor === 'all' || (typeof data.resetColor === 'number' && Number.isInteger(data.resetColor) && data.resetColor >= 1 && data.resetColor <= 9)) {
       // a reset chip or key on the canvas: one swatch, or all of them, back to the defaults
       const which = data.resetColor as number | 'all'
       palette = applyColorEdit(palette, { kind: 'reset', index: which })
-      return { props: props(t.colorReset(which)) }
+      return { props: canvasProps(t.colorReset(which)) }
     }
 
     if (typeof data.help === 'boolean') {
       helpOpen = data.help
       await applySize($, size) // the pane and the region change height
-      return { props: props() }
+      return { props: canvasProps() }
     }
 
     if (data.lang === 'ko' || data.lang === 'en') {
       lang = data.lang
       $.ui.invalidate('ui.render') // the size field's words change too
-      return { props: props(MSG[lang].switched) }
+      return { props: canvasProps(MSG[lang].switched) }
     }
 
     if (data.resize === 1 || data.resize === -1) {
@@ -418,33 +422,34 @@ export const register: Register = on => {
       if (next.w === size.w && next.ph === size.ph) {
         // nothing moved: the limit (or, if the terminal is narrower than MAX.w, the terminal's width and the height limit)
         const byTerminal = data.resize === 1 && paneColumns < MAX.w && size.w >= paneColumns
-        return { props: props(data.resize === 1 ? (byTerminal ? t.biggestFit(paneColumns) : t.biggest) : t.smallest) }
+        return { props: canvasProps(data.resize === 1 ? (byTerminal ? t.biggestFit(paneColumns) : t.biggest) : t.smallest) }
       }
       await applySize($, next)
-      return { props: props(t.sized(size.w, size.ph)) }
+      return { props: canvasProps(t.sized(size.w, size.ph)) }
     }
 
     if (data.export === 'js' || data.export === 'ascii') {
       const grid = decode(data.grid, size.w, size.ph)
       if (!grid) return {}
       const text = data.export === 'js' ? toCode(grid, size.w, size.ph, lang, palette) : toAscii(grid, size.w, size.ph, palette)
-      if (!text) return { props: props(t.empty) }
+      if (!text) return { props: canvasProps(t.empty) }
       lastExport = text
       const what = data.export === 'js' ? t.code : t.ascii
       const copied = await $.ui.copy({ text, surface: e.surface }).catch(() => ({ isCopied: false }))
       if (copied.isCopied) {
         $.ui.toast(`Paint: ${what}`)
-        return { props: props(t.copied(what)) }
+        return { props: canvasProps(t.copied(what)) }
       }
       // no clipboard on this surface: a file instead
       const home = (await $.env.get('HOME')) ?? '.'
       const stamp = new Date(await $.clock.now()).toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      const file = `${home}/Pictures/paint-${stamp}.${data.export === 'js' ? 'js' : 'txt'}`
+      // Always a .txt (the JS code is saved as text, not as a script anything could run), written to ~/Pictures
+      const file = `${home}/Pictures/paint-${stamp}.txt`
       try {
-        await $.fs.write(file, text)
-        return { props: props(t.toFile(file)) }
+        await $.fs.write(`${home}/Pictures/paint-${stamp}.txt`, text)
+        return { props: canvasProps(t.toFile(file)) }
       } catch (err) {
-        return { props: props(t.failed(String(err))) }
+        return { props: canvasProps(t.failed(String(err))) }
       }
     }
 
@@ -455,10 +460,10 @@ export const register: Register = on => {
     const stamp = new Date(await $.clock.now()).toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const file = `${home}/Pictures/paint-${stamp}.svg`
     try {
-      await $.fs.write(file, toSvg(grid, size.w, size.ph, 6, palette))
+      await $.fs.write(`${home}/Pictures/paint-${stamp}.svg`, toSvg(grid, size.w, size.ph, 6, palette))
       $.ui.toast(`Paint: saved ${file}`)
       saves += 1
-      return { props: props(t.saved(file, saves)) }
+      return { props: canvasProps(t.saved(file, saves)) }
     } catch (err) {
       $.ui.toast(`Paint: save failed (${String(err)})`)
       return {}
