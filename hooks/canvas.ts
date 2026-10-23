@@ -112,7 +112,7 @@ const TEXT = {
       ['대칭', 'm 키로 좌우 · 상하 · 4방향 · 끔 (반대쪽에도 찍혀요)'],
       ['직선', 'l 직선 도구, 또는 Shift 누르고 드래그 (가로·세로·45°)'],
       ['색', '1-9 색 · 0 지우개 · k 팔레트 · r 초기화 · R 전부 초기화'],
-      ['되돌리기', 'z 또는 Ctrl+Z 되돌리기 · y, Ctrl+Y, Shift+Z 다시'],
+      ['되돌리기', 'z 되돌리기 · y 다시 · Ctrl+Z 는 Claude Code 를 멈춰요!'],
       ['크기', `[ ] 또는 − + 칩, 아래 입력칸 (가로 ${LIMITS.minW}-${LIMITS.maxW}, 세로 ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['내보내기', 'e SVG 저장 · j JS 코드 복사 · a ASCII 복사 · c 지우기'],
       ['참고', '키는 캔버스를 한 번 클릭해야 먹어요 · ? 로 접기'],
@@ -140,7 +140,7 @@ const TEXT = {
       ['Mirror', 'm cycles left-right / up-down / both / off'],
       ['Line', 'l line tool, or hold Shift while dragging (0/45/90°)'],
       ['Colors', '1-9 pick · 0 eraser · k picker · r reset · R reset all'],
-      ['Undo', 'z or Ctrl+Z undo · y, Ctrl+Y or Shift+Z redo'],
+      ['Undo', 'z undo · y redo · Ctrl+Z suspends Claude Code!'],
       ['Size', `[ ] or − +, or the field below (w ${LIMITS.minW}-${LIMITS.maxW} · h ${LIMITS.minPh}-${LIMITS.maxPh})`],
       ['Output', 'e save SVG · j copy JS code · a copy ASCII · c clear'],
       ['Note', 'Click the canvas once so keys work · ? folds help'],
@@ -490,14 +490,18 @@ export default function Paint(props: Props, surface: any) {
         redraw()
       }
       s.note = ''
-      // A terminal can send Ctrl+letter as the control character itself (Ctrl+Z is 0x1A): read it as Ctrl+z
+      // A terminal can send Ctrl+letter as the control character itself (Ctrl+Y is 0x19): read it as Ctrl+y. Ctrl+_ is 0x1F.
       const code = typeof incoming.key === 'string' && incoming.key.length === 1 ? incoming.key.charCodeAt(0) : 0
-      const e = code >= 1 && code <= 26 && code !== 9 && code !== 10 && code !== 13 ? { ...incoming, key: String.fromCharCode(code + 96), ctrl: true as const } : incoming
+      const e = code >= 1 && code <= 26 && code !== 9 && code !== 10 && code !== 13 ? { ...incoming, key: String.fromCharCode(code + 96), ctrl: true as const }
+        : code === 31 ? { ...incoming, key: '_', ctrl: true as const }
+        : incoming
       if (!e.ctrl && !e.meta && e.key === 'R') { act('reset-all'); return } // Shift+R: every color back to its default
       const k = e.key.toLowerCase()
       if (e.ctrl || e.meta) {
-        // Ctrl+Z undoes, Ctrl+Y (or Ctrl+Shift+Z where the terminal says Shift) redoes; Cmd likewise. Nothing else with a modifier.
-        if (k === 'z') act(e.shift ? 'redo' : 'undo')
+        // Ctrl+_ (and Ctrl+/, the same key on many terminals) undoes, which is also what Claude Code uses in its own input;
+        // Ctrl+Y redoes. Ctrl+Z never gets here on macOS or Linux: Claude Code takes it to suspend itself (and the key is
+        // still handled in case a terminal does pass it on). Nothing else with a modifier.
+        if (k === 'z' || k === '_' || k === '/') act(e.shift && k === 'z' ? 'redo' : 'undo')
         else if (k === 'y') act('redo')
         return
       }

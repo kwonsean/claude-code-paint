@@ -16,7 +16,7 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 
 <p align="center"><sub><b>Preview, not a terminal capture:</b> rendered from the mod's own drawing code, with the butterfly drawn through its mouse handlers on the left half only (mirror mode on), using a customized palette, with the color picker (and its reset chips) open under the canvas. Fonts and colors will differ in your terminal.</sub></p>
 
-> **Status: early (0.9).** It was built against Claude Code's mod API and tested with a simulated engine and the API's type definitions. How mouse drags, `Shift` and `Ctrl+Z` reach it depends on your terminal (see [Terminals](#terminals)). Issues and reports of what works where are welcome.
+> **Status: early (0.9).** It was built against Claude Code's mod API and tested with a simulated engine and the API's type definitions. How mouse drags and `Shift` reach it depends on your terminal (see [Terminals](#terminals)). Issues and reports of what works where are welcome.
 
 ## Install
 
@@ -38,13 +38,15 @@ A paint canvas that lives in a [Claude Code](https://claude.com/claude-code) pan
 | Tools | `p` pen, `l` line, `f` fill, `b` brush size (1-4) |
 | Mirror | `m` cycles off → left-right → up-down → both → off, or click the chips on the fourth menu row |
 | Straight line | the `Line` tool (`l`), or hold `Shift` while dragging (snaps to 0 / 45 / 90°) |
-| Undo / redo | `z` or `Ctrl+Z` / `y`, `Ctrl+Y` or `Shift+Z` |
+| Undo / redo | `z` / `y` (or `Shift+Z`). **Not `Ctrl+Z`**: see the warning below |
 | Clear | `c` (undoable) |
 | Save | `e` writes `~/Pictures/paint-<time>.svg` |
 | Copy as code | `j` copies the drawing, cropped, as `const SPRITE = ["..R..", ...]` plus a `PALETTE` |
 | Copy as ASCII | `a` copies it as `█▓▒░` blocks, two characters per pixel, brighter colors denser |
 | Help | `?` or `h` folds / opens the help block |
 | Language | the chip at the end of the third row, or `/paint en` / `/paint ko` (Korean is the default) |
+
+> ⚠️ **Do not press `Ctrl+Z` in the pane.** On macOS and Linux Claude Code uses it to suspend itself (`Claude Code has been suspended. Run fg to bring Claude Code back`). The key never reaches the canvas and your session stops until you type `fg` in the shell. Use `z` for undo and `y` for redo, or the chips. The canvas also accepts `Ctrl+_` (Claude Code's own undo key for its input box) and `Ctrl+Y` where the terminal passes them on.
 
 The last JS/ASCII export can be printed in the chat with `/paint export`. If the terminal has no clipboard path, exports are written to `~/Pictures` instead.
 
@@ -116,7 +118,7 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 
 - Mouse drags need a terminal that passes mouse events to the program. Sub-cell precision (smoother vertical position) comes from terminals that report pixels: kitty, Ghostty, iTerm2, WezTerm. Elsewhere the top pixel of a character cell is used.
 - Many terminals keep `Shift`+drag for selecting text and never pass it on. Use the `Line` tool there.
-- Claude Code or your terminal may use `Ctrl+Z` for something else. `z` and `y` always work.
+- `Ctrl+Z` is taken by Claude Code (it suspends the session, see the warning under [Use](#use)). On a Mac the terminal also keeps `Cmd+Z` for its own Edit menu, and the key event the mod receives has no flag for the Cmd key, so `Cmd+Z` cannot be used either. `z` and `y` always work.
 
 ## Keys do nothing?
 
@@ -138,12 +140,14 @@ From the mod API's own report of what the code calls: it reads the `HOME` enviro
 
 ## 한국어
 
+> ⚠️ **패널에서 `Ctrl+Z`를 누르지 마세요.** macOS와 Linux에서는 Claude Code가 이 키를 자기 일시 정지(suspend)에 써서(`Claude Code has been suspended. Run fg to bring Claude Code back`) 캔버스에 도착하지도 않고 세션이 멈춰요. 터미널에 `fg` 를 입력하면 돌아와요. 되돌리기는 `z`, 다시 실행은 `y`(또는 화면의 칩)를 쓰세요. Mac의 `Cmd+Z`도 터미널이 자기 메뉴에 쓰기 때문에 못 써요.
+
 > 키가 안 먹을 때: 캔버스를 한 번 클릭한 뒤 누르세요. 업데이트한 뒤에는 Claude Code를 재시작해야 해요. `/paint debug` 를 켜고 캔버스를 클릭한 뒤 키를 누르면 상태 줄에 실제로 도착한 키와 마우스 입력이 나와요 (`key` 숫자가 안 늘면 터미널이나 Claude Code가 그 키를 가져가는 거예요). 다시 `/paint debug` 로 끄세요.
 
 패널을 그림판처럼 씁니다. `/paint` 로 열고 마우스를 끌어서 그립니다.
 
 - 왼쪽 버튼으로 그리고, 오른쪽 버튼으로 지웁니다. 위쪽 줄에서 색(0은 지우개)과 도구를 클릭하거나, 캔버스를 한 번 클릭한 뒤 키로 고릅니다.
-- 키: `1`-`9` 색, `0` 지우개, `p` 펜, `l` 직선, `f` 채우기, `m` 대칭, `b` 굵기(1-4), `z` 되돌리기(`Ctrl+Z`도 돼요), `y` 다시 실행(`Ctrl+Y`, `Shift+Z`), `c` 지우기, `e` 저장
+- 키: `1`-`9` 색, `0` 지우개, `p` 펜, `l` 직선, `f` 채우기, `m` 대칭, `b` 굵기(1-4), `z` 되돌리기, `y` 다시 실행(`Shift+Z`도 돼요), `c` 지우기, `e` 저장
 - 직선: `직선` 도구(`l`)는 누른 곳에서 끌고 있는 곳까지 곧은 선을 그려요. 펜이나 직선 도구에서 `Shift` 를 누른 채 끌면 가로·세로·45° 중 가까운 쪽으로 맞춰져요. (터미널에 따라 Shift+드래그는 텍스트 선택에 쓰여서 프로그램에 안 넘어올 수 있어요. 그럴 땐 `직선` 도구를 쓰세요.)
 - 대칭(미러) 모드: `m` 키나 네 번째 메뉴 줄의 칩으로 켜면, 칠하는 모든 것이 캔버스 가운데를 기준으로 반대쪽에도 똑같이 찍혀요.
   - 모드는 `좌우`, `상하`, `4방향`이에요. `m` 을 누를 때마다 좌우 → 상하 → 4방향 → 끔 순서로 바뀌어요.
