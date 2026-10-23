@@ -1,3 +1,4 @@
+/* @jsx h */
 // The paint canvas, drawn and driven on the surface: pointer down / move / up draw as the
 // mouse is dragged (a line is filled between two moves), keys pick colors and tools.
 //   Layout (cells, region-relative):  row 0 palette · row 1 tools · row 2 file · row 3 mirror · rows 4.. canvas · status row · help

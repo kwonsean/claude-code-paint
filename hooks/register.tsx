@@ -1,6 +1,6 @@
 /* @jsx h */
 // Paint: /paint opens a pane with a canvas you draw on by dragging the mouse.
-//   The canvas is a surface module (canvas.ts): it takes the pointer and keys on the surface and
+//   The canvas is a surface module (canvas.tsx): it takes the pointer and keys on the surface and
 //   draws itself. This hooks module opens the pane, hosts the module, and acts on what the canvas
 //   posts: saves, exports, resize and language requests. Under the canvas sits a size field.
 //   Two languages, Korean (the default) and English: /paint en, /paint ko, or the chip on the canvas.
@@ -15,7 +15,7 @@ export const MIN = { w: 24, ph: 12 }
 export const MAX = { w: 160, ph: 100 }
 const MENU_WIDTH = 66 // columns the menu rows need: the region is never narrower, whatever the canvas
 
-// The colors of canvas.ts (a surface module holds its own copy; a test checks they match).
+// The colors of canvas.tsx (a surface module holds its own copy; a test checks they match).
 export const PALETTE = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#8b5cf6', '#ec4899', '#ffffff', '#000000']
 
 const even = (n: number) => n - (n % 2)
@@ -76,10 +76,10 @@ export function stepSize(from: { w: number; ph: number }, dir: 1 | -1, maxW: num
   return { w: Math.min(from.w, Math.max(MIN.w, from.w - STEP)), ph: Math.min(from.ph, Math.max(MIN.ph, from.ph - STEP)) }
 }
 
-// Rows the help block under the canvas takes (canvas.ts draws exactly this many while it is open).
+// Rows the help block under the canvas takes (canvas.tsx draws exactly this many while it is open).
 export const HELP_ROWS = 10
 let helpOpen = true
-// Rows the color picker under the canvas takes (canvas.ts draws exactly this many while it is open).
+// Rows the color picker under the canvas takes (canvas.tsx draws exactly this many while it is open).
 export const PICKER_ROWS = 6
 let pickerOpen = false
 
@@ -346,10 +346,10 @@ export const register: Register = on => {
       if (done.changed) $.ui.invalidate('ui.render') // the canvas gets the new palette in its props
       $.ui.toast(`Paint: ${done.message}`)
     }
-    // The canvas is a surface module named by a fixed string (module="./canvas.ts"), so what this mod loads can be read from the source
+    // The canvas is a surface module named by a fixed string (module="./canvas.tsx"), so what this mod loads can be read from the source
     return (
       <Box flexDirection="column">
-        <Client key="canvas" module="./canvas.ts" props={canvasProps()} width={regionWidth} height={regionHeight} />
+        <Client key="canvas" module="./canvas.tsx" props={canvasProps()} width={regionWidth} height={regionHeight} />
         <Input key="size" label={MSG[lang].sizeLabel} placeholder={MSG[lang].sizePlaceholder} value="" submitLabel={MSG[lang].apply} onSubmit={onSizeSubmit} />
         <Input key="color" label={MSG[lang].colorLabel} placeholder={MSG[lang].colorPlaceholder} value="" submitLabel={MSG[lang].apply} onSubmit={onColorSubmit} />
       </Box>
