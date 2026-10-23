@@ -1,3 +1,4 @@
+/* @jsx h */
 // Paint: /paint opens a pane with a canvas you draw on by dragging the mouse.
 //   The canvas is a surface module (canvas.ts): it takes the pointer and keys on the surface and
 //   draws itself. This hooks module opens the pane, hosts the module, and acts on what the canvas
@@ -327,46 +328,32 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     if (e.surface !== 'terminal') {
       const { Text } = $.ui.resolve(e)
-      return Text({ children: [MSG[lang].needTerminal] })
+      return <Text>{MSG[lang].needTerminal}</Text>
     }
     const columns = e.props?.bodyColumns
     if (typeof columns === 'number' && columns > 0) paneColumns = columns
     const { Box, Client, Input } = $.ui.resolve(e)
     const regionWidth = Math.max(size.w, MENU_WIDTH)
     const regionHeight = size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) + (pickerOpen ? PICKER_ROWS : 0)
-    // The surface module is named by a fixed string, so what this mod loads can be read from the source
-    const canvas = Client({ key: 'canvas', module: './canvas.ts', props: canvasProps(), width: regionWidth, height: regionHeight })
-    return Box({
-      flexDirection: 'column',
-      children: [
-        canvas,
-        Input({
-          key: 'size',
-          label: MSG[lang].sizeLabel,
-          placeholder: MSG[lang].sizePlaceholder,
-          value: '',
-          submitLabel: MSG[lang].apply,
-          onSubmit: async value => {
-            const next = parseSize(value)
-            if (!next) return void $.ui.toast(MSG[lang].usage)
-            await applySize($, { w: next.w, ph: next.ph })
-            $.ui.toast(`Paint: ${next.adjusted ? MSG[lang].adjusted(value, next.w, next.ph) : MSG[lang].sized(next.w, next.ph)}`)
-          },
-        }),
-        Input({
-          key: 'color',
-          label: MSG[lang].colorLabel,
-          placeholder: MSG[lang].colorPlaceholder,
-          value: '',
-          submitLabel: MSG[lang].apply,
-          onSubmit: async value => {
-            const done = editColors(value)
-            if (done.changed) $.ui.invalidate('ui.render') // the canvas gets the new palette in its props
-            $.ui.toast(`Paint: ${done.message}`)
-          },
-        }),
-      ],
-    })
+    const onSizeSubmit = async (value: string) => {
+      const next = parseSize(value)
+      if (!next) return void $.ui.toast(MSG[lang].usage)
+      await applySize($, { w: next.w, ph: next.ph })
+      $.ui.toast(`Paint: ${next.adjusted ? MSG[lang].adjusted(value, next.w, next.ph) : MSG[lang].sized(next.w, next.ph)}`)
+    }
+    const onColorSubmit = async (value: string) => {
+      const done = editColors(value)
+      if (done.changed) $.ui.invalidate('ui.render') // the canvas gets the new palette in its props
+      $.ui.toast(`Paint: ${done.message}`)
+    }
+    // The canvas is a surface module named by a fixed string (module="./canvas.ts"), so what this mod loads can be read from the source
+    return (
+      <Box flexDirection="column">
+        <Client key="canvas" module="./canvas.ts" props={canvasProps()} width={regionWidth} height={regionHeight} />
+        <Input key="size" label={MSG[lang].sizeLabel} placeholder={MSG[lang].sizePlaceholder} value="" submitLabel={MSG[lang].apply} onSubmit={onSizeSubmit} />
+        <Input key="color" label={MSG[lang].colorLabel} placeholder={MSG[lang].colorPlaceholder} value="" submitLabel={MSG[lang].apply} onSubmit={onColorSubmit} />
+      </Box>
+    )
   })
 
   on('ui.message', async ($, e) => {

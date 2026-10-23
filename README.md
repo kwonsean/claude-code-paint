@@ -108,7 +108,7 @@ A new canvas is **32 × 32** px. `+` and `−` change the width and the height t
 
 ## How it works
 
-The canvas is drawn in pixels, two to a character with a half block (`▀`: the top pixel is the character color, the bottom pixel the background). Mouse and keys are handled on the surface by a `Client` module (`hooks/canvas.ts`), so dragging stays smooth; the hooks module (`hooks/register.ts`) opens the pane and does what needs the host: saving files, the clipboard, resizing the pane, the size field and the language.
+The canvas is drawn in pixels, two to a character with a half block (`▀`: the top pixel is the character color, the bottom pixel the background). Mouse and keys are handled on the surface by a `Client` module (`hooks/canvas.ts`), so dragging stays smooth; the hooks module (`hooks/register.tsx`) opens the pane and does what needs the host: saving files, the clipboard, resizing the pane, the size field and the language.
 
 ## What it touches
 
@@ -137,7 +137,7 @@ It does not edit or create build, start-up, settings or instruction files, and i
 
 ## Development
 
-- `hooks/register.ts` is the hooks module, `hooks/canvas.ts` the surface module (it is self-contained, so its palette and limits are copies of the ones in `register.ts`; keep them in step).
+- `hooks/register.tsx` is the hooks module, `hooks/canvas.ts` the surface module (it is self-contained, so its palette and limits are copies of the ones in `register.tsx`; keep them in step).
 - `tests/` uses the engine's testing helpers (`claude-code/testing`).
 - Check a change with `claude plugin validate .`. After editing an installed copy, bump `version` in `.claude-plugin/plugin.json` and run `claude plugin update paint@claude-code-paint`, because installed plugins run from a cached copy.
 

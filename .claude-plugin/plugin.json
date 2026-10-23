@@ -1,6 +1,6 @@
 {
   "name": "paint",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "description": "A paint canvas in a Claude Code pane: drag to draw, palette, brush, fill, straight lines, mirror mode, custom colors, undo/redo, resizable canvas, SVG save, copy as JS code or ASCII art. Korean and English.",
   "author": {
     "name": "Sihyeon Kwon",

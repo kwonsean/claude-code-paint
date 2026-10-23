@@ -4,7 +4,7 @@
 //   The canvas is pixels, two to a character with a half block (▀: top pixel as the color,
 //   bottom pixel as the background), 1 pixel per column.
 // A surface module runs apart from the hooks module, so it holds its own palette; a test
-// checks it matches register.ts. `h` and `Fragment` are the environment's: no variable takes them.
+// checks it matches register.tsx. `h` and `Fragment` are the environment's: no variable takes them.
 import type { ClientPointerEvent } from 'claude-code'
 
 type Lang = 'ko' | 'en'
