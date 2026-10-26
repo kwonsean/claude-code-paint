@@ -1,4 +1,3 @@
-/* @jsx h */
 // Paint: /paint opens a pane with a canvas you draw on by dragging the mouse.
 //   The canvas is a surface module (canvas.tsx): it takes the pointer and keys on the surface and
 //   draws itself. This hooks module opens the pane, hosts the module, and acts on what the canvas
@@ -333,6 +332,7 @@ export const register: Register = on => {
     const columns = e.props?.bodyColumns
     if (typeof columns === 'number' && columns > 0) paneColumns = columns
     const { Box, Client, Input } = $.ui.resolve(e)
+    const canvas = canvasProps()
     const regionWidth = Math.max(size.w, MENU_WIDTH)
     const regionHeight = size.ph / 2 + 5 + (helpOpen ? HELP_ROWS : 0) + (pickerOpen ? PICKER_ROWS : 0)
     const onSizeSubmit = async (value: string) => {
@@ -349,7 +349,7 @@ export const register: Register = on => {
     // The canvas is a surface module named by a fixed string (module="./canvas.tsx"), so what this mod loads can be read from the source
     return (
       <Box flexDirection="column">
-        <Client key="canvas" module="./canvas.tsx" props={canvasProps()} width={regionWidth} height={regionHeight} />
+        <Client key="canvas" module="./canvas.tsx" props={canvas} width={regionWidth} height={regionHeight} />
         <Input key="size" label={MSG[lang].sizeLabel} placeholder={MSG[lang].sizePlaceholder} value="" submitLabel={MSG[lang].apply} onSubmit={onSizeSubmit} />
         <Input key="color" label={MSG[lang].colorLabel} placeholder={MSG[lang].colorPlaceholder} value="" submitLabel={MSG[lang].apply} onSubmit={onColorSubmit} />
       </Box>
